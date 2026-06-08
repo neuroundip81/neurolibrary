@@ -1,0 +1,3398 @@
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+import {
+  LayoutDashboard,
+  BookOpen,
+  Users,
+  MessageSquare,
+  Tags,
+  Palette,
+  PlusCircle,
+  ArrowLeft,
+  Search,
+  Pencil,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Brain,
+  Star,
+  Download,
+  Eye,
+  Menu,
+  Save,
+  RotateCcw,
+  Sparkles,
+  Library,
+  BarChart3,
+  TrendingUp,
+  Award,
+  FileText,
+  Settings,
+  AlertCircle,
+  Monitor,
+  Minimize,
+  Maximize,
+  X,
+  Layers,
+  Activity,
+  Scan,
+  Stethoscope,
+  Scissors,
+  Pill,
+  Baby,
+  Zap,
+  HeartPulse,
+  PersonStanding,
+  FileUp,
+  Clock,
+  Upload,
+  UserCheck,
+  Filter,
+  ArrowUpDown,
+  ImageIcon,
+  Check,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { books as defaultBooks } from '@/data/books';
+import { categories as defaultCategories } from '@/data/categories';
+import { allUsers } from '@/data/usersData';
+import {
+  getDashboardStats,
+  getDownloadsOverTime,
+  getTopBooks,
+  getRecentActivity,
+  getBooksByCategory,
+  getUserActivityStats,
+  type RecentActivity,
+} from '@/services/analyticsService';
+import type { Book, Category, BookFormat } from '@/types';
+
+/* ─── Types ─── */
+interface ActivityItem {
+  id: string;
+  type: 'book' | 'user' | 'comment' | 'category' | 'theme';
+  message: string;
+  timestamp: string;
+}
+
+interface ThemeConfig {
+  primary: string;
+  secondary: string;
+  accent: string;
+  neural: string;
+  background: string;
+  text: string;
+  fontSize?: number;
+  borderRadius?: number;
+}
+
+type AdminTab =
+  | 'dashboard'
+  | 'books'
+  | 'users'
+  | 'comments'
+  | 'categories'
+  | 'theme'
+  | 'add-book'
+  | 'upload-file';
+
+interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
+  role: 'admin' | 'user';
+  joinDate: string;
+  specialization: string;
+  institution?: string;
+}
+
+interface AdminComment {
+  id: string;
+  bookId: string;
+  bookTitle: string;
+  userName: string;
+  userAvatar: string;
+  content: string;
+  rating: number;
+  createdAt: string;
+}
+
+/* ─── Helpers ─── */
+const generateId = () => Math.random().toString(36).substring(2, 10);
+
+const slugify = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .substring(0, 60);
+
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+const formatDateOnly = (iso: string) =>
+  new Date(iso).toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
+const getRelativeTime = (dateString: string): string => {
+  const now = new Date();
+  const date = new Date(dateString);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Baru saja';
+  if (diffMins < 60) return `${diffMins} menit lalu`;
+  if (diffHours < 24) return `${diffHours} jam lalu`;
+  if (diffDays < 7) return `${diffDays} hari lalu`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} minggu lalu`;
+  return `${Math.floor(diffDays / 30)} bulan lalu`;
+};
+
+const initialAdminUser: AdminUser = {
+  id: 'admin-1',
+  name: 'Dr. Admin',
+  email: 'admin@neurolibrary.id',
+  avatar: '',
+  role: 'admin',
+  joinDate: '2024-01-15T08:00:00Z',
+  specialization: 'Neurologi Umum',
+  institution: 'RSUD Dr. Soetomo',
+};
+
+const defaultTheme: ThemeConfig = {
+  primary: '#0e7490',
+  secondary: '#14b8a6',
+  accent: '#f59e0b',
+  neural: '#ec4899',
+  background: '#f0f9ff',
+  text: '#164e63',
+  fontSize: 14,
+  borderRadius: 8,
+};
+
+const themePresets: { name: string; colors: ThemeConfig }[] = [
+  {
+    name: 'Ocean',
+    colors: { primary: '#0e7490', secondary: '#14b8a6', accent: '#f59e0b', neural: '#ec4899', background: '#f0f9ff', text: '#164e63', fontSize: 14, borderRadius: 8 },
+  },
+  {
+    name: 'Forest',
+    colors: { primary: '#166534', secondary: '#16a34a', accent: '#d97706', neural: '#dc2626', background: '#f0fdf4', text: '#14532d', fontSize: 14, borderRadius: 8 },
+  },
+  {
+    name: 'Sunset',
+    colors: { primary: '#c2410c', secondary: '#ea580c', accent: '#ca8a04', neural: '#db2777', background: '#fff7ed', text: '#7c2d12', fontSize: 14, borderRadius: 8 },
+  },
+  {
+    name: 'Minimal',
+    colors: { primary: '#374151', secondary: '#6b7280', accent: '#2563eb', neural: '#9333ea', background: '#f9fafb', text: '#111827', fontSize: 14, borderRadius: 8 },
+  },
+];
+
+const navItems: { key: AdminTab | 'back'; label: string; icon: React.ElementType }[] = [
+  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { key: 'books', label: 'Kelola Buku', icon: BookOpen },
+  { key: 'users', label: 'Kelola Pengguna', icon: Users },
+  { key: 'comments', label: 'Kelola Komentar', icon: MessageSquare },
+  { key: 'categories', label: 'Kelola Kategori', icon: Tags },
+  { key: 'theme', label: 'Edit Tema', icon: Palette },
+  { key: 'add-book', label: 'Tambah Buku', icon: PlusCircle },
+  { key: 'upload-file', label: 'Upload File', icon: FileUp },
+  { key: 'back', label: 'Kembali ke Site', icon: ArrowLeft },
+];
+
+/* ─── Icon map for categories ─── */
+const iconMap: Record<string, React.ElementType> = {
+  Brain, Activity, Scan, Stethoscope, Scissors, Pill, Baby, Zap, HeartPulse, PersonStanding,
+  Layers, Sparkles, BookOpen, FileText, Library, Star, TrendingUp, Award, Monitor, Settings,
+};
+
+function getIconComponent(iconName: string): React.ElementType {
+  return iconMap[iconName] || BookOpen;
+}
+
+/* ─── Activity type colors ─── */
+const activityTypeConfig: Record<RecentActivity['type'], { color: string; bg: string; label: string }> = {
+  upload: { color: '#0e7490', bg: '#f0f9ff', label: 'Upload' },
+  rating: { color: '#f59e0b', bg: '#fffbeb', label: 'Rating' },
+  register: { color: '#14b8a6', bg: '#f0fdf4', label: 'Register' },
+  download: { color: '#ec4899', bg: '#fdf2f8', label: 'Download' },
+  bookmark: { color: '#8b5cf6', bg: '#f5f3ff', label: 'Bookmark' },
+  comment: { color: '#f59e0b', bg: '#fffbeb', label: 'Komentar' },
+};
+
+/* ─── Auth Guard Hook ─── */
+function useAdminGuard() {
+  const navigate = useNavigate();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    const raw = localStorage.getItem('neuro_user');
+    if (raw) {
+      try {
+        const user = JSON.parse(raw);
+        if (user.role === 'admin') {
+          setIsAdmin(true);
+        } else {
+          navigate('/');
+        }
+      } catch {
+        navigate('/');
+      }
+    } else {
+      navigate('/');
+    }
+    setChecked(true);
+  }, [navigate]);
+
+  return { isAdmin, checked };
+}
+
+/* ═══════════════════════════════════════════
+   MAIN ADMIN COMPONENT
+   ═══════════════════════════════════════════ */
+export default function Admin() {
+  const { isAdmin, checked } = useAdminGuard();
+  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navigate = useNavigate();
+
+  /* ── localStorage data ── */
+  const [books, setBooks] = useLocalStorage<Book[]>('neuro_books', defaultBooks);
+  const [users, setUsers] = useLocalStorage<AdminUser[]>('neuro_users', [
+    initialAdminUser,
+    ...allUsers
+      .filter((u) => u.id !== 'admin-1')
+      .map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        avatar: u.avatar,
+        role: u.role as 'admin' | 'user',
+        joinDate: u.joinDate,
+        specialization: u.specialty,
+        institution: u.institution,
+      })),
+  ]);
+  const [comments, setComments] = useLocalStorage<AdminComment[]>('neuro_comments', []);
+  const [categories, setCategories] = useLocalStorage<Category[]>('neuro_categories', defaultCategories);
+  const [activities, setActivities] = useLocalStorage<ActivityItem[]>('neuro_activities', []);
+  const [theme, setTheme] = useLocalStorage<ThemeConfig>('neuro_theme', defaultTheme);
+
+  /* ── Presentation Mode State ── */
+  const [showPresentation, setShowPresentation] = useState(false);
+  const [selectedBookForPresentation, setSelectedBookForPresentation] = useState<Book | null>(null);
+
+  /* ── Helpers ── */
+  const addActivity = useCallback(
+    (type: ActivityItem['type'], message: string) => {
+      const newActivity: ActivityItem = {
+        id: generateId(),
+        type,
+        message,
+        timestamp: new Date().toISOString(),
+      };
+      setActivities((prev) => [newActivity, ...prev].slice(0, 50));
+    },
+    [setActivities],
+  );
+
+  const handleNavClick = useCallback(
+    (key: AdminTab | 'back') => {
+      if (key === 'back') {
+        navigate('/');
+        return;
+      }
+      setActiveTab(key);
+      setSidebarOpen(false);
+    },
+    [navigate],
+  );
+
+  if (!checked) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#f0f9ff]">
+        <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#0e7490] border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!isAdmin) return null;
+
+  return (
+    <div className="flex h-screen bg-[#f0f9ff] overflow-hidden">
+      {/* ── Mobile overlay ── */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ═══ SIDEBAR ═══ */}
+      <motion.aside
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-[260px] bg-white border-r border-[#cffafe] flex flex-col shadow-lg lg:shadow-none transition-transform duration-300 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-3 px-5 h-16 border-b border-[#cffafe]">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center">
+            <Brain size={20} className="text-white" />
+          </div>
+          <span className="font-display text-lg font-bold text-[#164e63]">
+            Neuro<span className="text-[#0e7490]">Admin</span>
+          </span>
+        </div>
+
+        {/* Nav Items */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.key;
+            const isBack = item.key === 'back';
+
+            return (
+              <button
+                key={item.key}
+                onClick={() => handleNavClick(item.key as AdminTab | 'back')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isBack
+                    ? 'text-[#64748b] hover:bg-[#f0f9ff] mt-4'
+                    : isActive
+                    ? 'bg-[#0e7490] text-white'
+                    : 'text-[#164e63] hover:bg-[#f0f9ff]'
+                }`}
+              >
+                <Icon size={18} />
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-[#cffafe]">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-xs font-bold">
+              A
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-[#164e63] truncate">Admin</p>
+              <p className="text-xs text-[#64748b] truncate">admin@neurolibrary.id</p>
+            </div>
+          </div>
+        </div>
+      </motion.aside>
+
+      {/* ═══ MAIN CONTENT ═══ */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top bar */}
+        <header className="flex items-center gap-3 px-4 sm:px-6 h-16 bg-white/80 backdrop-blur-md border-b border-[#cffafe] flex-shrink-0">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="lg:hidden w-9 h-9 rounded-lg border border-[#cffafe] flex items-center justify-center text-[#64748b] hover:bg-[#f0f9ff]"
+          >
+            <Menu size={18} />
+          </button>
+          <h1 className="text-lg font-semibold text-[#164e63] capitalize">
+            {navItems.find((n) => n.key === activeTab)?.label || 'Dashboard'}
+          </h1>
+        </header>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.25 }}
+            >
+              {activeTab === 'dashboard' && (
+                <DashboardTab
+                  books={books}
+                  users={users}
+                  comments={comments}
+                  activities={activities}
+                  categories={categories}
+                  onOpenPresentation={(book) => {
+                    setSelectedBookForPresentation(book);
+                    setShowPresentation(true);
+                  }}
+                />
+              )}
+              {activeTab === 'books' && (
+                <BooksTab
+                  books={books}
+                  setBooks={setBooks}
+                  categories={categories}
+                  addActivity={addActivity}
+                  onOpenPresentation={(book) => {
+                    setSelectedBookForPresentation(book);
+                    setShowPresentation(true);
+                  }}
+                />
+              )}
+              {activeTab === 'users' && (
+                <UsersTab
+                  users={users}
+                  setUsers={setUsers}
+                  addActivity={addActivity}
+                />
+              )}
+              {activeTab === 'comments' && (
+                <CommentsTab
+                  comments={comments}
+                  setComments={setComments}
+                  books={books}
+                  addActivity={addActivity}
+                />
+              )}
+              {activeTab === 'categories' && (
+                <CategoriesTab
+                  categories={categories}
+                  setCategories={setCategories}
+                  books={books}
+                  setBooks={setBooks}
+                  addActivity={addActivity}
+                />
+              )}
+              {activeTab === 'theme' && (
+                <ThemeTab theme={theme} setTheme={setTheme} addActivity={addActivity} />
+              )}
+              {activeTab === 'add-book' && (
+                <AddBookTab
+                  setBooks={setBooks}
+                  categories={categories}
+                  addActivity={addActivity}
+                />
+              )}
+              {activeTab === 'upload-file' && (
+                <UploadFileTab addActivity={addActivity} />
+              )}
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Presentation Mode Modal */}
+          <PresentationMode
+            isOpen={showPresentation}
+            onClose={() => setShowPresentation(false)}
+            book={selectedBookForPresentation}
+          />
+        </div>
+      </main>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   DASHBOARD TAB (Enhanced with Analytics)
+   ═══════════════════════════════════════════ */
+function DashboardTab({
+  books,
+  onOpenPresentation,
+}: {
+  books: Book[];
+  users: AdminUser[];
+  comments: AdminComment[];
+  activities: ActivityItem[];
+  categories: Category[];
+  onOpenPresentation: (book: Book) => void;
+}) {
+  const stats = useMemo(() => getDashboardStats(), []);
+  const downloadChart = useMemo(() => getDownloadsOverTime(7), []);
+  const topBooksList = useMemo(() => getTopBooks(10), []);
+  const booksByCat = useMemo(() => getBooksByCategory(), []);
+  const recentActivity = useMemo(() => getRecentActivity(15), []);
+  const userStats = useMemo(() => getUserActivityStats(), []);
+
+  const maxDownloads = Math.max(...downloadChart.map((d) => d.downloads), 1);
+  const maxCatCount = Math.max(...booksByCat.map((c) => c.count), 1);
+
+  return (
+    <div className="space-y-6">
+      {/* ── Stats Cards Row 1 ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <EnhancedStatCard
+          icon={Library}
+          label="Total Buku"
+          value={stats.totalBooks}
+          sub={`+${stats.booksAddedThisMonth} bulan ini`}
+          color="#0e7490"
+        />
+        <EnhancedStatCard
+          icon={Users}
+          label="Total Pengguna"
+          value={stats.totalUsers}
+          sub={`${stats.activeUsers} aktif`}
+          color="#14b8a6"
+        />
+        <EnhancedStatCard
+          icon={Download}
+          label="Total Downloads"
+          value={stats.totalDownloads}
+          sub={`${stats.downloadsThisWeek} minggu ini`}
+          color="#ec4899"
+        />
+      </div>
+
+      {/* ── Stats Cards Row 2 ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <EnhancedStatCard
+          icon={Star}
+          label="Rating Rata-rata"
+          value={stats.averageRating}
+          sub="dari semua buku"
+          color="#f59e0b"
+          isDecimal
+        />
+        <EnhancedStatCard
+          icon={BookOpen}
+          label="Buku Ditambahkan"
+          value={stats.booksAddedThisMonth}
+          sub="bulan ini"
+          color="#8b5cf6"
+        />
+        <EnhancedStatCard
+          icon={UserCheck}
+          label="Pengguna Aktif"
+          value={stats.activeUsers}
+          sub={`dari ${stats.totalUsers} total`}
+          color="#10b981"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ── Downloads per Day (Bar Chart) ── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-[#164e63] flex items-center gap-2 text-base">
+              <BarChart3 size={18} className="text-[#0e7490]" />
+              Download per Hari (7 Hari Terakhir)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-2 h-[180px]">
+              {downloadChart.map((day, i) => (
+                <div key={day.date} className="flex-1 flex flex-col items-center gap-1.5">
+                  <div className="text-xs text-[#64748b] font-medium">{day.downloads}</div>
+                  <div className="w-full bg-[#f0f9ff] rounded-t-md overflow-hidden relative" style={{ height: '120px' }}>
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: `${(day.downloads / maxDownloads) * 100}%` }}
+                      transition={{ duration: 0.8, delay: i * 0.08, ease: 'easeOut' }}
+                      className="absolute bottom-0 left-0 right-0 rounded-t-md bg-gradient-to-t from-[#0e7490] to-[#14b8a6]"
+                    />
+                  </div>
+                  <div className="text-[10px] text-[#64748b]">{day.label}</div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Books by Category (Horizontal Bar) ── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-[#164e63] flex items-center gap-2 text-base">
+              <Layers size={18} className="text-[#14b8a6]" />
+              Buku per Kategori
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {booksByCat.map((cat, i) => (
+                <div key={cat.slug}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-[#164e63] font-medium">{cat.name}</span>
+                    <span className="text-[#64748b]">{cat.count}</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-[#f0f9ff] rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(cat.count / maxCatCount) * 100}%` }}
+                      transition={{ duration: 0.8, delay: i * 0.08, ease: 'easeOut' }}
+                      className="h-full rounded-full bg-gradient-to-r from-[#0e7490] to-[#14b8a6]"
+                    />
+                  </div>
+                </div>
+              ))}
+              {booksByCat.length === 0 && (
+                <p className="text-sm text-[#64748b] text-center py-4">Belum ada data kategori</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ── Top 10 Most Downloaded Books ── */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-[#164e63] flex items-center gap-2 text-base">
+                <TrendingUp size={18} className="text-[#14b8a6]" />
+                Top 10 Buku Terbanyak Diunduh
+              </CardTitle>
+              {topBooksList[0] && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const book = books.find((b) => b.id === topBooksList[0].id);
+                    if (book) onOpenPresentation(book);
+                  }}
+                  className="text-xs border-[#cffafe] text-[#0e7490] hover:bg-[#f0f9ff]"
+                >
+                  <Monitor size={14} className="mr-1" />
+                  Presentasi
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
+              {topBooksList.map((book, i) => (
+                <motion.div
+                  key={book.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3, delay: i * 0.04 }}
+                  className="flex items-center gap-3 p-2.5 rounded-lg bg-[#f0f9ff]/50 hover:bg-[#f0f9ff] transition-colors"
+                >
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                      i === 0
+                        ? 'bg-[#f59e0b] text-white'
+                        : i === 1
+                        ? 'bg-[#94a3b8] text-white'
+                        : i === 2
+                        ? 'bg-[#cd7f32] text-white'
+                        : 'bg-white border border-[#cffafe] text-[#64748b]'
+                    }`}
+                  >
+                    {i + 1}
+                  </div>
+                  <img
+                    src={book.coverImage}
+                    alt={book.title}
+                    className="w-8 h-10 object-cover rounded"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/placeholder-book.png';
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#164e63] truncate">{book.title}</p>
+                    <p className="text-xs text-[#64748b]">{book.author}</p>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="flex items-center gap-1 text-xs text-amber-500">
+                      <Star size={10} className="fill-current" />
+                      {book.rating}
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-[#0e7490] font-semibold">
+                      <Download size={10} />
+                      {book.downloads.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── User Activity Table ── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-[#164e63] flex items-center gap-2 text-base">
+              <Users size={18} className="text-[#ec4899]" />
+              Aktivitas Pengguna
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
+              {userStats.map((user, i) => (
+                <motion.div
+                  key={user.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3, delay: i * 0.05 }}
+                  className="flex items-center gap-3 p-3 rounded-lg bg-[#f0f9ff]/50 hover:bg-[#f0f9ff] transition-colors"
+                >
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#164e63] truncate">{user.name}</p>
+                    <p className="text-xs text-[#64748b]">{user.specialty}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs text-[#0e7490] font-semibold">{user.booksRead} selesai</p>
+                    <p className="text-[10px] text-[#94a3b8]">{getRelativeTime(user.lastActive)}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Recent Activity Table ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-[#164e63] flex items-center gap-2 text-base">
+            <Sparkles size={18} className="text-[#ec4899]" />
+            Aktivitas Terbaru
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {recentActivity.length === 0 ? (
+            <p className="text-sm text-[#64748b] text-center py-6">Belum ada aktivitas</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-[#cffafe]">
+                  <tr className="text-left text-[#64748b]">
+                    <th className="pb-2 font-medium w-[100px]">Aksi</th>
+                    <th className="pb-2 font-medium">Keterangan</th>
+                    <th className="pb-2 font-medium">Pengguna</th>
+                    <th className="pb-2 font-medium text-right">Waktu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentActivity.map((act) => {
+                    const config = activityTypeConfig[act.type];
+                    return (
+                      <tr key={act.id} className="border-b border-[#cffafe]/50">
+                        <td className="py-2.5">
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                            style={{ backgroundColor: config.bg, color: config.color }}
+                          >
+                            {config.label}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-[#164e63] max-w-[300px] truncate">{act.action}</td>
+                        <td className="py-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-[8px] font-bold">
+                              {act.user.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-[#64748b] text-xs">{act.user}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 text-[#94a3b8] text-xs text-right whitespace-nowrap">
+                          {getRelativeTime(act.timestamp)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   ENHANCED STAT CARD
+   ═══════════════════════════════════════════ */
+function EnhancedStatCard({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  color,
+  isDecimal,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: number;
+  sub: string;
+  color: string;
+  isDecimal?: boolean;
+}) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const duration = 1200;
+    const steps = 40;
+    const increment = value / steps;
+    let current = 0;
+    const timer = setInterval(() => {
+      current += increment;
+      if (current >= value) {
+        setDisplayValue(value);
+        clearInterval(timer);
+      } else {
+        setDisplayValue(Math.floor(current * 10) / 10);
+      }
+    }, duration / steps);
+    return () => clearInterval(timer);
+  }, [value]);
+
+  return (
+    <Card className="relative overflow-hidden">
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-[#64748b] mb-1">{label}</p>
+            <p className="text-2xl font-bold text-[#164e63]">
+              {isDecimal ? displayValue.toFixed(1) : Math.floor(displayValue).toLocaleString('id-ID')}
+            </p>
+            <p className="text-xs text-[#94a3b8] mt-1">{sub}</p>
+          </div>
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center"
+            style={{ backgroundColor: `${color}15` }}
+          >
+            <Icon size={24} style={{ color }} />
+          </div>
+        </div>
+      </CardContent>
+      <div className="absolute bottom-0 left-0 right-0 h-1" style={{ backgroundColor: color }} />
+    </Card>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   BOOKS TAB (Kelola Buku)
+   ═══════════════════════════════════════════ */
+function BooksTab({
+  books,
+  setBooks,
+  categories,
+  addActivity,
+  onOpenPresentation,
+}: {
+  books: Book[];
+  setBooks: React.Dispatch<React.SetStateAction<Book[]>>;
+  categories: Category[];
+  addActivity: (type: ActivityItem['type'], message: string) => void;
+  onOpenPresentation: (book: Book) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [editBook, setEditBook] = useState<Book | null>(null);
+  const [deleteBook, setDeleteBook] = useState<Book | null>(null);
+  const perPage = 10;
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return books.filter(
+      (b) =>
+        b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q),
+    );
+  }, [books, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+
+  const handleDelete = () => {
+    if (!deleteBook) return;
+    setBooks((prev) => prev.filter((b) => b.id !== deleteBook.id));
+    addActivity('book', `Menghapus buku "${deleteBook.title}"`);
+    toast.success('Buku berhasil dihapus');
+    setDeleteBook(null);
+  };
+
+  const handleSaveEdit = (updated: Book) => {
+    setBooks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+    addActivity('book', `Mengedit buku "${updated.title}"`);
+    toast.success('Buku berhasil diperbarui');
+    setEditBook(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Search */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-[400px]">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+          <Input
+            placeholder="Cari judul atau penulis..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="pl-9"
+          />
+        </div>
+        <span className="text-sm text-[#64748b]">{filtered.length} buku</span>
+      </div>
+
+      {/* Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-[#f0f9ff]">
+                  <TableHead className="w-[60px]">Cover</TableHead>
+                  <TableHead>Judul</TableHead>
+                  <TableHead>Penulis</TableHead>
+                  <TableHead>Kategori</TableHead>
+                  <TableHead>Format</TableHead>
+                  <TableHead className="text-center">Tahun</TableHead>
+                  <TableHead className="text-center">Rating</TableHead>
+                  <TableHead className="text-center">Downloads</TableHead>
+                  <TableHead className="text-right">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginated.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8 text-[#64748b]">
+                      Tidak ada buku ditemukan
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginated.map((book) => (
+                    <TableRow key={book.id}>
+                      <TableCell>
+                        <img
+                          src={book.coverImage}
+                          alt={book.title}
+                          className="w-10 h-14 object-cover rounded"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/placeholder-book.png';
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium text-[#164e63] max-w-[200px] truncate">
+                        {book.title}
+                      </TableCell>
+                      <TableCell className="text-[#64748b]">{book.author}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs border-[#cffafe] text-[#0e7490]">
+                          {book.category}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={`text-xs ${
+                            book.format === 'PDF'
+                              ? 'bg-red-50 text-red-600 border-red-200'
+                              : book.format === 'DOC'
+                              ? 'bg-blue-50 text-blue-600 border-blue-200'
+                              : 'bg-green-50 text-green-600 border-green-200'
+                          }`}
+                          variant="outline"
+                        >
+                          {book.format}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center text-[#64748b]">{book.year}</TableCell>
+                      <TableCell className="text-center">
+                        <span className="flex items-center justify-center gap-1 text-amber-500 text-sm">
+                          <Star size={12} className="fill-current" />
+                          {book.rating}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center text-[#0e7490] font-medium">
+                        {book.downloads?.toLocaleString('id-ID')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => onOpenPresentation(book)}
+                            className="h-8 w-8 text-[#14b8a6] hover:bg-[#f0f9ff]"
+                            title="Mode Presentasi"
+                          >
+                            <Monitor size={15} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setEditBook(book)}
+                            className="h-8 w-8 text-[#0e7490] hover:bg-[#f0f9ff]"
+                          >
+                            <Pencil size={15} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setDeleteBook(book)}
+                            className="h-8 w-8 text-red-500 hover:bg-red-50"
+                          >
+                            <Trash2 size={15} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-[#64748b]">
+            Halaman {page} dari {totalPages}
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="h-8 w-8 p-0"
+            >
+              <ChevronLeft size={16} />
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <Button
+                key={p}
+                variant={p === page ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setPage(p)}
+                className={`h-8 w-8 p-0 text-xs ${
+                  p === page ? 'bg-[#0e7490] text-white' : ''
+                }`}
+              >
+                {p}
+              </Button>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="h-8 w-8 p-0"
+            >
+              <ChevronRight size={16} />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      <Dialog open={!!editBook} onOpenChange={() => setEditBook(null)}>
+        <DialogContent className="max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63]">Edit Buku</DialogTitle>
+            <DialogDescription>Edit detail buku di bawah ini.</DialogDescription>
+          </DialogHeader>
+          {editBook && (
+            <BookForm
+              book={editBook}
+              categories={categories}
+              onSubmit={handleSaveEdit}
+              onCancel={() => setEditBook(null)}
+              submitLabel="Simpan Perubahan"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <Dialog open={!!deleteBook} onOpenChange={() => setDeleteBook(null)}>
+        <DialogContent className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63] flex items-center gap-2">
+              <AlertCircle size={20} className="text-red-500" />
+              Konfirmasi Hapus
+            </DialogTitle>
+            <DialogDescription>
+              Apakah Anda yakin ingin menghapus buku &quot;{deleteBook?.title}&quot;? Tindakan ini tidak dapat dibatalkan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteBook(null)}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              <Trash2 size={15} className="mr-1" />
+              Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   USERS TAB (Kelola Pengguna - Enhanced)
+   ═══════════════════════════════════════════ */
+function UsersTab({
+  users,
+  setUsers,
+  addActivity,
+}: {
+  users: AdminUser[];
+  setUsers: React.Dispatch<React.SetStateAction<AdminUser[]>>;
+  addActivity: (type: ActivityItem['type'], message: string) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<'name' | 'role' | 'date'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [filterRole, setFilterRole] = useState<'all' | 'admin' | 'user'>('all');
+  const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
+  const [viewUser, setViewUser] = useState<AdminUser | null>(null);
+  const [editRoleUser, setEditRoleUser] = useState<AdminUser | null>(null);
+  const [newRole, setNewRole] = useState<'admin' | 'user'>('user');
+  const perPage = 7;
+
+  const handleSort = (field: 'name' | 'role' | 'date') => {
+    if (sortBy === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
+
+  const filtered = useMemo(() => {
+    let result = [...users];
+
+    // Filter by role
+    if (filterRole !== 'all') {
+      result = result.filter((u) => u.role === filterRole);
+    }
+
+    // Search
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          (u.specialization || '').toLowerCase().includes(q) ||
+          (u.institution || '').toLowerCase().includes(q),
+      );
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'name') {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortBy === 'role') {
+        comparison = a.role.localeCompare(b.role);
+      } else if (sortBy === 'date') {
+        comparison = new Date(a.joinDate).getTime() - new Date(b.joinDate).getTime();
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [users, filterRole, search, sortBy, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+
+  const handleRoleChange = (userId: string, role: 'admin' | 'user') => {
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+    const user = users.find((u) => u.id === userId);
+    if (user) {
+      addActivity('user', `Mengubah role ${user.name} menjadi ${role}`);
+      toast.success(`Role ${user.name} diubah menjadi ${role}`);
+    }
+    setEditRoleUser(null);
+  };
+
+  const handleDelete = () => {
+    if (!deleteUser) return;
+    if (deleteUser.id === 'admin-1') {
+      toast.error('Tidak dapat menghapus admin utama');
+      setDeleteUser(null);
+      return;
+    }
+    setUsers((prev) => prev.filter((u) => u.id !== deleteUser.id));
+    addActivity('user', `Menghapus pengguna "${deleteUser.name}"`);
+    toast.success('Pengguna berhasil dihapus');
+    setDeleteUser(null);
+  };
+
+  const SortIcon = ({ field }: { field: 'name' | 'role' | 'date' }) => (
+    <ArrowUpDown
+      size={12}
+      className={`ml-1 inline transition-colors ${
+        sortBy === field ? 'text-[#0e7490]' : 'text-[#94a3b8]'
+      }`}
+    />
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 max-w-[300px]">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+          <Input
+            placeholder="Cari nama, email, spesialisasi..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="pl-9"
+          />
+        </div>
+        <Select value={filterRole} onValueChange={(v) => { setFilterRole(v as typeof filterRole); setPage(1); }}>
+          <SelectTrigger className="w-[130px]">
+            <Filter size={14} className="mr-1 text-[#94a3b8]" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Role</SelectItem>
+            <SelectItem value="admin">Admin</SelectItem>
+            <SelectItem value="user">User</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="text-sm text-[#64748b]">{filtered.length} pengguna</span>
+      </div>
+
+      {/* Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-[#f0f9ff]">
+                  <TableHead className="cursor-pointer" onClick={() => handleSort('name')}>
+                    Pengguna <SortIcon field="name" />
+                  </TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead className="cursor-pointer" onClick={() => handleSort('role')}>
+                    Role <SortIcon field="role" />
+                  </TableHead>
+                  <TableHead>Spesialisasi</TableHead>
+                  <TableHead>Institusi</TableHead>
+                  <TableHead className="cursor-pointer" onClick={() => handleSort('date')}>
+                    Bergabung <SortIcon field="date" />
+                  </TableHead>
+                  <TableHead className="text-right">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginated.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-[#64748b]">
+                      Tidak ada pengguna ditemukan
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginated.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                            {user.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <span className="font-medium text-[#164e63] block">{user.name}</span>
+                            {user.id === 'admin-1' && (
+                              <span className="text-[10px] text-[#0e7490] font-medium">Super Admin</span>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-[#64748b]">{user.email}</TableCell>
+                      <TableCell>
+                        {user.role === 'admin' ? (
+                          <Badge className="bg-[#0e7490] text-white border-0">Admin</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[#64748b] border-[#cffafe]">
+                            User
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-[#64748b]">{user.specialization || '-'}</TableCell>
+                      <TableCell className="text-[#64748b] text-sm">{user.institution || '-'}</TableCell>
+                      <TableCell className="text-[#64748b] text-sm whitespace-nowrap">
+                        {formatDateOnly(user.joinDate)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setViewUser(user)}
+                            className="h-8 w-8 text-[#0e7490] hover:bg-[#f0f9ff]"
+                            title="Lihat profil"
+                          >
+                            <Eye size={15} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => {
+                              setEditRoleUser(user);
+                              setNewRole(user.role);
+                            }}
+                            className="h-8 w-8 text-[#14b8a6] hover:bg-[#f0f9ff]"
+                            title="Edit role"
+                          >
+                            <Pencil size={15} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setDeleteUser(user)}
+                            className="h-8 w-8 text-red-500 hover:bg-red-50"
+                            title="Hapus pengguna"
+                          >
+                            <Trash2 size={15} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-[#64748b]">
+            Halaman {page} dari {totalPages}
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="h-8 w-8 p-0"
+            >
+              <ChevronLeft size={16} />
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <Button
+                key={p}
+                variant={p === page ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setPage(p)}
+                className={`h-8 w-8 p-0 text-xs ${
+                  p === page ? 'bg-[#0e7490] text-white' : ''
+                }`}
+              >
+                {p}
+              </Button>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="h-8 w-8 p-0"
+            >
+              <ChevronRight size={16} />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* View Profile Dialog */}
+      <Dialog open={!!viewUser} onOpenChange={() => setViewUser(null)}>
+        <DialogContent className="max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63] flex items-center gap-2">
+              <Users size={20} className="text-[#0e7490]" />
+              Profil Pengguna
+            </DialogTitle>
+          </DialogHeader>
+          {viewUser && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
+                  {viewUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-[#164e63]">{viewUser.name}</h3>
+                  <p className="text-sm text-[#64748b]">{viewUser.email}</p>
+                  <div className="mt-1">
+                    {viewUser.role === 'admin' ? (
+                      <Badge className="bg-[#0e7490] text-white border-0">Administrator</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[#64748b] border-[#cffafe]">User</Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-[#f0f9ff] rounded-lg p-3">
+                  <p className="text-[#94a3b8] text-xs mb-1">Spesialisasi</p>
+                  <p className="text-[#164e63] font-medium">{viewUser.specialization || '-'}</p>
+                </div>
+                <div className="bg-[#f0f9ff] rounded-lg p-3">
+                  <p className="text-[#94a3b8] text-xs mb-1">Institusi</p>
+                  <p className="text-[#164e63] font-medium">{viewUser.institution || '-'}</p>
+                </div>
+                <div className="bg-[#f0f9ff] rounded-lg p-3">
+                  <p className="text-[#94a3b8] text-xs mb-1">Bergabung</p>
+                  <p className="text-[#164e63] font-medium">{formatDateOnly(viewUser.joinDate)}</p>
+                </div>
+                <div className="bg-[#f0f9ff] rounded-lg p-3">
+                  <p className="text-[#94a3b8] text-xs mb-1">ID Pengguna</p>
+                  <p className="text-[#164e63] font-medium text-xs">{viewUser.id}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Role Dialog */}
+      <Dialog open={!!editRoleUser} onOpenChange={() => setEditRoleUser(null)}>
+        <DialogContent className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63]">Ubah Role</DialogTitle>
+            <DialogDescription>
+              Ubah role untuk pengguna &quot;{editRoleUser?.name}&quot;
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Select value={newRole} onValueChange={(v) => setNewRole(v as 'admin' | 'user')}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="user">User</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditRoleUser(null)}>
+              Batal
+            </Button>
+            <Button
+              onClick={() => editRoleUser && handleRoleChange(editRoleUser.id, newRole)}
+              className="bg-[#0e7490] hover:bg-[#155e75]"
+            >
+              <Check size={15} className="mr-1" />
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <Dialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>
+        <DialogContent className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63] flex items-center gap-2">
+              <AlertCircle size={20} className="text-red-500" />
+              Konfirmasi Hapus
+            </DialogTitle>
+            <DialogDescription>
+              Apakah Anda yakin ingin menghapus pengguna &quot;{deleteUser?.name}&quot;?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteUser(null)}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              <Trash2 size={15} className="mr-1" />
+              Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════
+   COMMENTS TAB (Kelola Komentar)
+   ═══════════════════════════════════════════ */
+function CommentsTab({
+  comments,
+  setComments,
+  books,
+  addActivity,
+}: {
+  comments: AdminComment[];
+  setComments: React.Dispatch<React.SetStateAction<AdminComment[]>>;
+  books: Book[];
+  addActivity: (type: ActivityItem['type'], message: string) => void;
+}) {
+  const [filterBook, setFilterBook] = useState('all');
+  const [filterUser, setFilterUser] = useState('');
+  const [deleteComment, setDeleteComment] = useState<AdminComment | null>(null);
+
+  const filtered = useMemo(() => {
+    return comments.filter((c) => {
+      const matchBook = filterBook === 'all' || c.bookId === filterBook;
+      const matchUser =
+        !filterUser || c.userName.toLowerCase().includes(filterUser.toLowerCase());
+      return matchBook && matchUser;
+    });
+  }, [comments, filterBook, filterUser]);
+
+  const handleDelete = () => {
+    if (!deleteComment) return;
+    setComments((prev) => prev.filter((c) => c.id !== deleteComment.id));
+    addActivity('comment', `Menghapus komentar dari ${deleteComment.userName}`);
+    toast.success('Komentar berhasil dihapus');
+    setDeleteComment(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={filterBook} onValueChange={setFilterBook}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filter buku" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Buku</SelectItem>
+            {books.map((b) => (
+              <SelectItem key={b.id} value={b.id}>
+                {b.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+          <Input
+            placeholder="Filter pengguna..."
+            value={filterUser}
+            onChange={(e) => setFilterUser(e.target.value)}
+            className="pl-8 w-[200px]"
+          />
+        </div>
+        <span className="text-sm text-[#64748b]">{filtered.length} komentar</span>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-[#f0f9ff]">
+                  <TableHead>Pengguna</TableHead>
+                  <TableHead>Buku</TableHead>
+                  <TableHead>Komentar</TableHead>
+                  <TableHead className="text-center">Rating</TableHead>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead className="text-right">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-[#64748b]">
+                      Tidak ada komentar
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((comment) => (
+                    <TableRow key={comment.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-xs font-bold">
+                            {comment.userName.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="text-[#164e63] font-medium">{comment.userName}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-[#64748b] max-w-[150px] truncate">
+                        {comment.bookTitle}
+                      </TableCell>
+                      <TableCell className="text-[#164e63] max-w-[250px] truncate">
+                        {comment.content}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="flex items-center justify-center gap-1 text-amber-500 text-sm">
+                          <Star size={12} className="fill-current" />
+                          {comment.rating}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-[#64748b] text-sm">
+                        {formatDate(comment.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => setDeleteComment(comment)}
+                          className="h-8 w-8 text-red-500 hover:bg-red-50"
+                        >
+                          <Trash2 size={15} />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Delete Confirmation */}
+      <Dialog open={!!deleteComment} onOpenChange={() => setDeleteComment(null)}>
+        <DialogContent className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63] flex items-center gap-2">
+              <AlertCircle size={20} className="text-red-500" />
+              Konfirmasi Hapus
+            </DialogTitle>
+            <DialogDescription>Apakah Anda yakin ingin menghapus komentar ini?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteComment(null)}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              <Trash2 size={15} className="mr-1" />
+              Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   CATEGORIES TAB (Kelola Kategori)
+   ═══════════════════════════════════════════ */
+const gradientPresets = [
+  { name: 'Ocean', value: 'from-[#0e7490] to-[#14b8a6]' },
+  { name: 'Sunset', value: 'from-[#f59e0b] to-[#ef4444]' },
+  { name: 'Forest', value: 'from-[#16a34a] to-[#15803d]' },
+  { name: 'Purple', value: 'from-[#8b5cf6] to-[#ec4899]' },
+  { name: 'Dark', value: 'from-[#334155] to-[#1e293b]' },
+  { name: 'Rose', value: 'from-[#f43f5e] to-[#e11d48]' },
+];
+
+function CategoriesTab({
+  categories,
+  setCategories,
+  books,
+  setBooks,
+  addActivity,
+}: {
+  categories: Category[];
+  setCategories: React.Dispatch<React.SetStateAction<Category[]>>;
+  books: Book[];
+  setBooks: React.Dispatch<React.SetStateAction<Book[]>>;
+  addActivity: (type: ActivityItem['type'], message: string) => void;
+}) {
+  const [newName, setNewName] = useState('');
+  const [newIcon, setNewIcon] = useState('BookOpen');
+  const [newDescription, setNewDescription] = useState('');
+  const [newGradient, setNewGradient] = useState('from-[#0e7490] to-[#14b8a6]');
+  const [editCategory, setEditCategory] = useState<Category | null>(null);
+  const [deleteCategory, setDeleteCategory] = useState<Category | null>(null);
+
+  const availableIcons = Object.keys(iconMap);
+
+  const getBookCount = (slug: string) => books.filter((b) => b.categorySlug === slug).length;
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) {
+      toast.error('Nama kategori wajib diisi');
+      return;
+    }
+    const slug = newName.toLowerCase().replace(/\s+/g, '-');
+    const newCat: Category = {
+      id: generateId(),
+      name: newName.trim(),
+      slug,
+      description: newDescription.trim(),
+      icon: newIcon,
+      bookCount: 0,
+      gradient: newGradient,
+    };
+    setCategories((prev) => [...prev, newCat]);
+    addActivity('category', `Menambahkan kategori "${newCat.name}"`);
+    toast.success('Kategori berhasil ditambahkan');
+    setNewName('');
+    setNewDescription('');
+    setNewIcon('BookOpen');
+    setNewGradient('from-[#0e7490] to-[#14b8a6]');
+  };
+
+  const handleEditSave = () => {
+    if (!editCategory || !editCategory.name.trim()) {
+      toast.error('Nama kategori wajib diisi');
+      return;
+    }
+    const oldSlug = categories.find((c) => c.id === editCategory.id)?.slug;
+    const newSlug = editCategory.name.toLowerCase().replace(/\s+/g, '-');
+
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === editCategory.id
+          ? { ...editCategory, slug: newSlug }
+          : c,
+      ),
+    );
+
+    // Update books that use this category
+    if (oldSlug && oldSlug !== newSlug) {
+      setBooks((prev) =>
+        prev.map((b) =>
+          b.categorySlug === oldSlug
+            ? { ...b, categorySlug: newSlug, category: editCategory.name }
+            : b,
+        ),
+      );
+    }
+
+    addActivity('category', `Mengedit kategori "${editCategory.name}"`);
+    toast.success('Kategori berhasil diperbarui');
+    setEditCategory(null);
+  };
+
+  const handleDelete = () => {
+    if (!deleteCategory) return;
+    const hasBooks = books.some((b) => b.categorySlug === deleteCategory.slug);
+    if (hasBooks) {
+      toast.error('Tidak dapat menghapus kategori yang masih memiliki buku');
+      setDeleteCategory(null);
+      return;
+    }
+    setCategories((prev) => prev.filter((c) => c.id !== deleteCategory.id));
+    addActivity('category', `Menghapus kategori "${deleteCategory.name}"`);
+    toast.success('Kategori berhasil dihapus');
+    setDeleteCategory(null);
+  };
+
+  const moveCategory = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === categories.length - 1) return;
+    const newCategories = [...categories];
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    [newCategories[index], newCategories[swapIndex]] = [newCategories[swapIndex], newCategories[index]];
+    setCategories(newCategories);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Add Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+            <PlusCircle size={18} className="text-[#0e7490]" />
+            Tambah Kategori
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleAdd} className="space-y-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[200px]">
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">Nama Kategori</label>
+                <Input
+                  placeholder="Nama kategori baru..."
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">Ikon</label>
+                <Select value={newIcon} onValueChange={setNewIcon}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableIcons.map((iconName) => {
+                      const IconComp = iconMap[iconName];
+                      return (
+                        <SelectItem key={iconName} value={iconName}>
+                          <span className="flex items-center gap-2">
+                            <IconComp size={14} />
+                            {iconName}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button type="submit" className="bg-[#0e7490] hover:bg-[#155e75]">
+                <PlusCircle size={15} className="mr-1" />
+                Tambah
+              </Button>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-[#164e63] mb-1 block">Deskripsi</label>
+              <Textarea
+                placeholder="Deskripsi kategori (opsional)..."
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                rows={2}
+                className="text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-[#164e63] mb-1 block">Gradient</label>
+              <div className="flex flex-wrap gap-2">
+                {gradientPresets.map((g) => (
+                  <button
+                    key={g.value}
+                    type="button"
+                    onClick={() => setNewGradient(g.value)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      newGradient === g.value
+                        ? 'border-[#0e7490] bg-[#f0f9ff] text-[#0e7490]'
+                        : 'border-[#cffafe] text-[#64748b] hover:border-[#0e7490]'
+                    }`}
+                  >
+                    <span className={`inline-block w-3 h-3 rounded-full bg-gradient-to-r ${g.value} mr-1 align-middle`} />
+                    {g.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Category List */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {categories.map((cat, index) => {
+          const IconComp = getIconComponent(cat.icon);
+          const count = getBookCount(cat.slug);
+          return (
+            <motion.div
+              key={cat.id}
+              layout
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-xl border border-[#cffafe] p-4 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${cat.gradient || 'from-[#0e7490] to-[#14b8a6]'} flex items-center justify-center text-white`}>
+                    <IconComp size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-[#164e63]">{cat.name}</h3>
+                    <button
+                      onClick={() => {
+                        if (count > 0) {
+                          const params = new URLSearchParams({ category: cat.slug });
+                          window.location.href = `/?${params.toString()}`;
+                        }
+                      }}
+                      className={`text-xs ${count > 0 ? 'text-[#0e7490] hover:underline cursor-pointer' : 'text-[#64748b] cursor-default'}`}
+                      title={count > 0 ? 'Lihat buku dalam kategori ini' : ''}
+                    >
+                      {count} buku &middot; {cat.slug}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => moveCategory(index, 'up')}
+                    disabled={index === 0}
+                    className="h-7 w-7 text-[#64748b] hover:bg-[#f0f9ff] disabled:opacity-30"
+                    title="Naik"
+                  >
+                    <ChevronLeft size={13} className="rotate-90" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => moveCategory(index, 'down')}
+                    disabled={index === categories.length - 1}
+                    className="h-7 w-7 text-[#64748b] hover:bg-[#f0f9ff] disabled:opacity-30"
+                    title="Turun"
+                  >
+                    <ChevronLeft size={13} className="-rotate-90" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setEditCategory(cat)}
+                    className="h-7 w-7 text-[#0e7490] hover:bg-[#f0f9ff]"
+                  >
+                    <Pencil size={13} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setDeleteCategory(cat)}
+                    className="h-7 w-7 text-red-500 hover:bg-red-50"
+                  >
+                    <Trash2 size={13} />
+                  </Button>
+                </div>
+              </div>
+              {cat.description && (
+                <p className="mt-2 text-xs text-[#64748b] line-clamp-2">{cat.description}</p>
+              )}
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Edit Modal */}
+      <Dialog open={!!editCategory} onOpenChange={() => setEditCategory(null)}>
+        <DialogContent className="max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63]">Edit Kategori</DialogTitle>
+          </DialogHeader>
+          {editCategory && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">Nama Kategori</label>
+                <Input
+                  value={editCategory.name}
+                  onChange={(e) => setEditCategory({ ...editCategory, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">Deskripsi</label>
+                <Textarea
+                  value={editCategory.description || ''}
+                  onChange={(e) => setEditCategory({ ...editCategory, description: e.target.value })}
+                  rows={2}
+                  className="text-sm"
+                  placeholder="Deskripsi kategori..."
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">Ikon</label>
+                <Select
+                  value={editCategory.icon}
+                  onValueChange={(v) => setEditCategory({ ...editCategory, icon: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableIcons.map((iconName) => {
+                      const IconComp = iconMap[iconName];
+                      return (
+                        <SelectItem key={iconName} value={iconName}>
+                          <span className="flex items-center gap-2">
+                            <IconComp size={14} />
+                            {iconName}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">Gradient</label>
+                <div className="flex flex-wrap gap-2">
+                  {gradientPresets.map((g) => (
+                    <button
+                      key={g.value}
+                      type="button"
+                      onClick={() => setEditCategory({ ...editCategory, gradient: g.value })}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                        editCategory.gradient === g.value
+                          ? 'border-[#0e7490] bg-[#f0f9ff] text-[#0e7490]'
+                          : 'border-[#cffafe] text-[#64748b] hover:border-[#0e7490]'
+                      }`}
+                    >
+                      <span className={`inline-block w-3 h-3 rounded-full bg-gradient-to-r ${g.value} mr-1 align-middle`} />
+                      {g.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditCategory(null)}>
+                  Batal
+                </Button>
+                <Button onClick={handleEditSave} className="bg-[#0e7490] hover:bg-[#155e75]">
+                  <Save size={15} className="mr-1" />
+                  Simpan
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <Dialog open={!!deleteCategory} onOpenChange={() => setDeleteCategory(null)}>
+        <DialogContent className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63] flex items-center gap-2">
+              <AlertCircle size={20} className="text-red-500" />
+              Konfirmasi Hapus
+            </DialogTitle>
+            <DialogDescription>
+              Apakah Anda yakin ingin menghapus kategori &quot;{deleteCategory?.name}&quot;?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteCategory(null)}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              <Trash2 size={15} className="mr-1" />
+              Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════
+   THEME TAB (Edit Tema)
+   ═══════════════════════════════════════════ */
+function ThemeTab({
+  theme,
+  setTheme,
+  addActivity,
+}: {
+  theme: ThemeConfig;
+  setTheme: React.Dispatch<React.SetStateAction<ThemeConfig>>;
+  addActivity: (type: ActivityItem['type'], message: string) => void;
+}) {
+  const [localTheme, setLocalTheme] = useState<ThemeConfig>({ ...theme });
+  const [importJson, setImportJson] = useState('');
+  const [showImport, setShowImport] = useState(false);
+
+  useEffect(() => {
+    setLocalTheme({ ...theme });
+  }, [theme]);
+
+  const update = (key: keyof ThemeConfig, value: string | number) => {
+    setLocalTheme((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = () => {
+    setTheme(localTheme);
+    addActivity('theme', 'Mengubah tema website');
+    toast.success('Tema berhasil disimpan');
+  };
+
+  const handleReset = () => {
+    setLocalTheme({ ...defaultTheme });
+    setTheme({ ...defaultTheme });
+    addActivity('theme', 'Mereset tema ke default');
+    toast.success('Tema direset ke default');
+  };
+
+  const applyPreset = (preset: ThemeConfig) => {
+    setLocalTheme({ ...preset });
+    setTheme({ ...preset });
+    addActivity('theme', `Menerapkan preset tema`);
+    toast.success('Preset tema diterapkan');
+  };
+
+  const handleExport = () => {
+    const css = `:root {
+  --primary: ${localTheme.primary};
+  --secondary: ${localTheme.secondary};
+  --accent: ${localTheme.accent};
+  --neural: ${localTheme.neural};
+  --background: ${localTheme.background};
+  --text: ${localTheme.text};
+  --font-size: ${localTheme.fontSize || 14}px;
+  --border-radius: ${localTheme.borderRadius || 8}px;
+}`;
+    navigator.clipboard.writeText(css).then(() => toast.success('CSS tema disalin ke clipboard'));
+  };
+
+  const handleImport = () => {
+    try {
+      const parsed = JSON.parse(importJson);
+      const newTheme = { ...defaultTheme, ...parsed };
+      setLocalTheme(newTheme);
+      setTheme(newTheme);
+      addActivity('theme', 'Mengimpor tema dari JSON');
+      toast.success('Tema berhasil diimpor');
+      setShowImport(false);
+      setImportJson('');
+    } catch {
+      toast.error('JSON tidak valid');
+    }
+  };
+
+  const colorFields: { key: keyof ThemeConfig; label: string }[] = [
+    { key: 'primary', label: 'Primary' },
+    { key: 'secondary', label: 'Secondary' },
+    { key: 'accent', label: 'Accent' },
+    { key: 'neural', label: 'Neural' },
+    { key: 'background', label: 'Background' },
+    { key: 'text', label: 'Text' },
+  ];
+
+  const fontSize = localTheme.fontSize || 14;
+  const borderRadius = localTheme.borderRadius || 8;
+
+  return (
+    <div className="space-y-6">
+      {/* Presets */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+            <Sparkles size={18} className="text-[#f59e0b]" />
+            Preset Tema
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {themePresets.map((preset) => (
+              <button
+                key={preset.name}
+                onClick={() => applyPreset(preset.colors)}
+                className="p-3 rounded-xl border border-[#cffafe] hover:shadow-md transition-all text-left group"
+              >
+                <div className="flex gap-1.5 mb-2">
+                  {Object.values(preset.colors).slice(0, 4).map((color, i) => (
+                    <div
+                      key={i}
+                      className="w-5 h-5 rounded-full"
+                      style={{ backgroundColor: color as string }}
+                    />
+                  ))}
+                </div>
+                <p className="text-sm font-medium text-[#164e63] group-hover:text-[#0e7490]">
+                  {preset.name}
+                </p>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Color Pickers */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+              <Palette size={18} className="text-[#ec4899]" />
+              Warna Kustom
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {colorFields.map(({ key, label }) => (
+              <div key={key} className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-lg border-2 border-white shadow-sm"
+                  style={{ backgroundColor: localTheme[key] as string }}
+                />
+                <div className="flex-1">
+                  <label className="text-sm font-medium text-[#164e63] block">{label}</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={localTheme[key] as string}
+                      onChange={(e) => update(key, e.target.value)}
+                      className="w-8 h-8 rounded cursor-pointer border-0 p-0"
+                    />
+                    <Input
+                      value={localTheme[key] as string}
+                      onChange={(e) => update(key, e.target.value)}
+                      className="w-[100px] text-sm font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Font Size Slider */}
+            <div className="pt-2">
+              <label className="text-sm font-medium text-[#164e63] block mb-2">
+                Ukuran Font: {fontSize}px
+              </label>
+              <input
+                type="range"
+                min={10}
+                max={20}
+                value={fontSize}
+                onChange={(e) => update('fontSize', parseInt(e.target.value))}
+                className="w-full accent-[#0e7490]"
+              />
+              <div className="flex justify-between text-[10px] text-[#94a3b8]">
+                <span>10px</span>
+                <span>20px</span>
+              </div>
+            </div>
+
+            {/* Border Radius Slider */}
+            <div className="pt-2">
+              <label className="text-sm font-medium text-[#164e63] block mb-2">
+                Border Radius: {borderRadius}px
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={24}
+                value={borderRadius}
+                onChange={(e) => update('borderRadius', parseInt(e.target.value))}
+                className="w-full accent-[#0e7490]"
+              />
+              <div className="flex justify-between text-[10px] text-[#94a3b8]">
+                <span>0px</span>
+                <span>24px</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <Button onClick={handleSave} className="bg-[#0e7490] hover:bg-[#155e75]">
+                <Save size={15} className="mr-1" />
+                Simpan Tema
+              </Button>
+              <Button variant="outline" onClick={handleReset}>
+                <RotateCcw size={15} className="mr-1" />
+                Reset Default
+              </Button>
+              <Button variant="outline" onClick={handleExport}>
+                <FileText size={15} className="mr-1" />
+                Export CSS
+              </Button>
+              <Button variant="outline" onClick={() => setShowImport(!showImport)}>
+                <Upload size={15} className="mr-1" />
+                Import JSON
+              </Button>
+            </div>
+
+            {/* Import Theme Textarea */}
+            {showImport && (
+              <div className="space-y-2 pt-2">
+                <Textarea
+                  placeholder='Tempel JSON tema di sini...&#10;Contoh: { "primary": "#0e7490", "secondary": "#14b8a6" }'
+                  value={importJson}
+                  onChange={(e) => setImportJson(e.target.value)}
+                  rows={4}
+                  className="text-xs font-mono"
+                />
+                <Button onClick={handleImport} className="bg-[#0e7490] hover:bg-[#155e75] text-xs">
+                  Terapkan Tema JSON
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Live Preview */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+              <Eye size={18} className="text-[#14b8a6]" />
+              Pratinjau Langsung
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className="rounded-xl space-y-3 overflow-hidden"
+              style={{ backgroundColor: localTheme.background, fontSize: `${fontSize}px` }}
+            >
+              {/* Sample Navbar */}
+              <div
+                className="px-4 py-2.5 flex items-center gap-3"
+                style={{ backgroundColor: localTheme.primary, borderRadius: 0 }}
+              >
+                <div className="w-6 h-6 rounded bg-white/20" />
+                <div className="flex-1 h-3 rounded bg-white/20 w-24" />
+                <div className="h-3 rounded bg-white/20 w-16" />
+              </div>
+
+              <div className="p-4 space-y-3">
+                {/* Sample Button */}
+                <div className="flex items-center gap-2">
+                  <button
+                    className="px-4 py-2 text-white text-sm font-medium"
+                    style={{ backgroundColor: localTheme.primary, borderRadius: `${borderRadius}px` }}
+                  >
+                    Tombol Primary
+                  </button>
+                  <button
+                    className="px-4 py-2 text-white text-sm font-medium"
+                    style={{ backgroundColor: localTheme.secondary, borderRadius: `${borderRadius}px` }}
+                  >
+                    Tombol Secondary
+                  </button>
+                </div>
+
+                {/* Sample Card */}
+                <div
+                  className="p-3 bg-white shadow-sm border"
+                  style={{ borderColor: localTheme.primary + '30', borderRadius: `${borderRadius}px` }}
+                >
+                  <h4 className="font-semibold mb-1" style={{ color: localTheme.text, fontSize: `${fontSize + 2}px` }}>
+                    Judul Kartu
+                  </h4>
+                  <p style={{ color: localTheme.text + 'aa', fontSize: `${fontSize}px` }}>
+                    Ini adalah contoh teks dalam kartu untuk melihat bagaimana warna teks dan
+                    latar belakang bekerja bersama.
+                  </p>
+                </div>
+
+                {/* Sample Badges */}
+                <div className="flex items-center gap-2">
+                  <span
+                    className="px-2.5 py-1 font-medium text-white"
+                    style={{ backgroundColor: localTheme.accent, borderRadius: `${borderRadius * 2}px`, fontSize: `${fontSize - 2}px` }}
+                  >
+                    Accent
+                  </span>
+                  <span
+                    className="px-2.5 py-1 font-medium text-white"
+                    style={{ backgroundColor: localTheme.neural, borderRadius: `${borderRadius * 2}px`, fontSize: `${fontSize - 2}px` }}
+                  >
+                    Neural
+                  </span>
+                  <span
+                    className="px-2.5 py-1 font-medium text-white"
+                    style={{ backgroundColor: localTheme.primary, borderRadius: `${borderRadius * 2}px`, fontSize: `${fontSize - 2}px` }}
+                  >
+                    Primary
+                  </span>
+                </div>
+
+                {/* Sample Progress */}
+                <div>
+                  <div className="flex justify-between mb-1" style={{ color: localTheme.text, fontSize: `${fontSize - 2}px` }}>
+                    <span>Progress</span>
+                    <span>75%</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-white/50">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: '75%',
+                        background: `linear-gradient(to right, ${localTheme.primary}, ${localTheme.secondary})`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════
+   ADD BOOK TAB (Tambah Buku - Enhanced)
+   ═══════════════════════════════════════════ */
+function AddBookTab({
+  setBooks,
+  categories,
+  addActivity,
+}: {
+  setBooks: React.Dispatch<React.SetStateAction<Book[]>>;
+  categories: Category[];
+  addActivity: (type: ActivityItem['type'], message: string) => void;
+}) {
+  const emptyBook: Book = {
+    id: '',
+    title: '',
+    author: '',
+    category: categories[0]?.name || '',
+    categorySlug: categories[0]?.slug || '',
+    description: '',
+    coverImage: '/placeholder-book.png',
+    format: 'PDF',
+    rating: 0,
+    ratingCount: 0,
+    downloads: 0,
+    year: new Date().getFullYear(),
+    pages: 0,
+    isbn: '',
+    publisher: '',
+    language: 'English',
+    featured: false,
+    tags: [],
+  };
+
+  const [form, setForm] = useState<Book>({ ...emptyBook });
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const [coverPreview, setCoverPreview] = useState<string>('/placeholder-book.png');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const update = <K extends keyof Book>(field: K, value: Book[K]) => {
+    setForm((prev) => {
+      const next = { ...prev, [field]: value };
+      // Auto-generate slug when title changes
+      if (field === 'title' && typeof value === 'string') {
+        next.categorySlug = slugify(value);
+      }
+      return next;
+    });
+    setErrors((prev) => ({ ...prev, [field]: false }));
+  };
+
+  // Handle cover image upload
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('File harus berupa gambar (JPG, PNG, GIF)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran gambar maksimal 5MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      setCoverPreview(result);
+      update('coverImage', result);
+      toast.success('Cover berhasil diupload');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle file upload (PDF/DOC/PPT)
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validExts = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx'];
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    if (!validExts.includes(ext)) {
+      toast.error('Format tidak didukung. Gunakan PDF, Word, Excel, atau PowerPoint.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File terlalu besar. Maksimal 10MB.');
+      return;
+    }
+    setUploadedFile(file);
+    // Auto-detect format from extension
+    const formatMap: Record<string, BookFormat> = {
+      '.pdf': 'PDF', '.doc': 'DOC', '.docx': 'DOCX',
+      '.ppt': 'PPT', '.pptx': 'PPTX', '.xls': 'XLS', '.xlsx': 'XLSX',
+    };
+    if (formatMap[ext]) {
+      update('format', formatMap[ext]);
+    }
+    toast.success(`File "${file.name}" siap diupload`);
+  };
+
+  // Drag & drop handlers for file
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false); };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const f = e.dataTransfer.files[0];
+    if (f) {
+      const validExts = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx'];
+      const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+      if (!validExts.includes(ext)) {
+        toast.error('Format tidak didukung');
+        return;
+      }
+      setUploadedFile(f);
+      toast.success(`File "${f.name}" siap diupload`);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newErrors: Record<string, boolean> = {};
+    if (!form.title.trim()) newErrors.title = true;
+    if (!form.author.trim()) newErrors.author = true;
+    if (!form.category) newErrors.category = true;
+    if (!form.year || form.year < 1800) newErrors.year = true;
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error('Mohon lengkapi field yang wajib diisi');
+      return;
+    }
+
+    const selectedCat = categories.find((c) => c.name === form.category);
+    const newBook: Book = {
+      ...form,
+      id: generateId(),
+      categorySlug: selectedCat?.slug || form.categorySlug || slugify(form.title),
+    };
+
+    setBooks((prev) => [newBook, ...prev]);
+    addActivity('book', `Menambahkan buku "${newBook.title}"`);
+    toast.success('Buku berhasil ditambahkan!');
+    setForm({ ...emptyBook });
+    setCoverPreview('/placeholder-book.png');
+    setUploadedFile(null);
+  };
+
+  return (
+    <Card className="max-w-[900px]">
+      <CardHeader>
+        <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+          <PlusCircle size={18} className="text-[#0e7490]" />
+          Form Tambah Buku
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Cover Upload Section */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {/* Cover Preview */}
+            <div className="sm:col-span-1">
+              <label className="text-sm font-medium text-[#164e63] mb-2 block">Cover Buku</label>
+              <div
+                onClick={() => coverInputRef.current?.click()}
+                className="relative aspect-[3/4] rounded-xl border-2 border-dashed border-[#cffafe] hover:border-[#0e7490] cursor-pointer transition-all overflow-hidden bg-[#f0f9ff] group"
+              >
+                <img
+                  src={coverPreview}
+                  alt="Cover preview"
+                  className="w-full h-full object-cover"
+                  onError={() => setCoverPreview('/placeholder-book.png')}
+                />
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="text-center text-white">
+                    <ImageIcon size={32} className="mx-auto mb-1" />
+                    <p className="text-xs">Klik untuk ganti cover</p>
+                  </div>
+                </div>
+              </div>
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleCoverUpload}
+                className="hidden"
+              />
+              <p className="text-[10px] text-[#94a3b8] mt-1.5 text-center">Klik gambar untuk upload cover (max 5MB)</p>
+
+              {/* Slug preview */}
+              {form.title && (
+                <div className="mt-4 p-3 bg-[#f0f9ff] rounded-lg">
+                  <label className="text-[10px] text-[#94a3b8] uppercase tracking-wider">Auto Slug</label>
+                  <p className="text-xs text-[#0e7490] font-mono mt-0.5 break-all">{slugify(form.title)}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Form Fields */}
+            <div className="sm:col-span-2 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">
+                    Judul Buku *
+                  </label>
+                  <Input
+                    placeholder="Masukkan judul buku..."
+                    value={form.title}
+                    onChange={(e) => update('title', e.target.value)}
+                    className={errors.title ? 'border-red-400' : ''}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">
+                    Penulis *
+                  </label>
+                  <Input
+                    placeholder="Nama penulis..."
+                    value={form.author}
+                    onChange={(e) => update('author', e.target.value)}
+                    className={errors.author ? 'border-red-400' : ''}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">
+                    Kategori *
+                  </label>
+                  <Select value={form.category} onValueChange={(v) => update('category', v)}>
+                    <SelectTrigger className={errors.category ? 'border-red-400' : ''}>
+                      <SelectValue placeholder="Pilih kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.name}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">Format</label>
+                  <Select value={form.format} onValueChange={(v) => update('format', v as BookFormat)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(['PDF', 'DOC', 'DOCX', 'PPT', 'PPTX', 'XLS', 'XLSX'] as BookFormat[]).map((f) => (
+                        <SelectItem key={f} value={f}>
+                          {f}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">
+                    Tahun Terbit *
+                  </label>
+                  <Input
+                    type="number"
+                    placeholder="2024"
+                    value={form.year}
+                    onChange={(e) => update('year', parseInt(e.target.value) || 0)}
+                    className={errors.year ? 'border-red-400' : ''}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">Jumlah Halaman</label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={form.pages}
+                    onChange={(e) => update('pages', parseInt(e.target.value) || 0)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">Bahasa</label>
+                  <Input
+                    placeholder="English"
+                    value={form.language}
+                    onChange={(e) => update('language', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">Rating (0-5)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="5"
+                    placeholder="0"
+                    value={form.rating}
+                    onChange={(e) => update('rating', parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">ISBN</label>
+                  <Input
+                    placeholder="978-..."
+                    value={form.isbn}
+                    onChange={(e) => update('isbn', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">Penerbit</label>
+                  <Input
+                    placeholder="Nama penerbit..."
+                    value={form.publisher}
+                    onChange={(e) => update('publisher', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* File Upload Section */}
+          <div className="border-t border-[#cffafe] pt-4">
+            <label className="text-sm font-medium text-[#164e63] mb-2 block">
+              <FileUp size={14} className="inline mr-1" />
+              Upload File Buku
+            </label>
+            {!uploadedFile ? (
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+                  isDragOver
+                    ? 'border-[#0e7490] bg-[#f0f9ff] scale-[1.01]'
+                    : 'border-[#0e7490]/30 hover:border-[#0e7490] hover:bg-[#f0f9ff]/30'
+                }`}
+              >
+                <div
+                  className={`w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center ${
+                    isDragOver ? 'bg-[#0e7490] text-white' : 'bg-[#f0f9ff] text-[#0e7490]'
+                  }`}
+                >
+                  <Upload size={22} />
+                </div>
+                <p className="text-sm font-medium text-[#164e63]">Drag & drop file di sini</p>
+                <p className="text-xs text-[#64748b] mt-1">PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX</p>
+                <p className="text-[10px] text-[#94a3b8] mt-1">Maksimal 10MB</p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-[#f0f9ff] border border-[#cffafe]">
+                <div className="w-10 h-10 rounded-lg bg-[#0e7490]/10 flex items-center justify-center flex-shrink-0">
+                  <FileText size={20} className="text-[#0e7490]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#164e63] truncate">{uploadedFile.name}</p>
+                  <p className="text-xs text-[#64748b]">{(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setUploadedFile(null)}
+                  className="h-8 w-8 text-red-500 hover:bg-red-50 flex-shrink-0"
+                >
+                  <X size={14} />
+                </Button>
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="text-sm font-medium text-[#164e63] mb-1 block">Deskripsi</label>
+            <Textarea
+              rows={5}
+              placeholder="Deskripsi buku..."
+              value={form.description}
+              onChange={(e) => update('description', e.target.value)}
+            />
+          </div>
+
+          {/* Featured Toggle */}
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={form.featured}
+              onCheckedChange={(v) => update('featured', v)}
+            />
+            <label className="text-sm text-[#164e63]">Tampilkan sebagai buku unggulan</label>
+          </div>
+
+          {/* Submit */}
+          <div className="pt-4 border-t border-[#cffafe] flex items-center gap-3">
+            <Button type="submit" size="lg" className="bg-[#0e7490] hover:bg-[#155e75]">
+              <PlusCircle size={18} className="mr-2" />
+              Tambah Buku
+            </Button>
+            {uploadedFile && (
+              <span className="text-xs text-[#14b8a6] flex items-center gap-1">
+                <Check size={14} />
+                File "{uploadedFile.name}" akan diupload
+              </span>
+            )}
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+
+/* ═══════════════════════════════════════════
+   BOOK FORM (Shared for Add/Edit)
+   ═══════════════════════════════════════════ */
+function BookForm({
+  book,
+  categories,
+  onSubmit,
+  onCancel,
+  submitLabel,
+}: {
+  book: Book;
+  categories: Category[];
+  onSubmit: (book: Book) => void;
+  onCancel: () => void;
+  submitLabel: string;
+}) {
+  const [form, setForm] = useState<Book>({ ...book });
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+
+  const update = <K extends keyof Book>(field: K, value: Book[K]) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setErrors((prev) => ({ ...prev, [field]: false }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newErrors: Record<string, boolean> = {};
+    if (!form.title.trim()) newErrors.title = true;
+    if (!form.author.trim()) newErrors.author = true;
+    if (!form.category) newErrors.category = true;
+    if (!form.year || form.year < 1800) newErrors.year = true;
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error('Mohon lengkapi field yang wajib diisi');
+      return;
+    }
+
+    const selectedCat = categories.find((c) => c.name === form.category);
+    onSubmit({
+      ...form,
+      categorySlug: selectedCat?.slug || form.categorySlug,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Judul *</label>
+          <Input
+            value={form.title}
+            onChange={(e) => update('title', e.target.value)}
+            className={errors.title ? 'border-red-400' : ''}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Penulis *</label>
+          <Input
+            value={form.author}
+            onChange={(e) => update('author', e.target.value)}
+            className={errors.author ? 'border-red-400' : ''}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Kategori *</label>
+          <Select value={form.category} onValueChange={(v) => update('category', v)}>
+            <SelectTrigger className={errors.category ? 'border-red-400' : ''}>
+              <SelectValue placeholder="Pilih kategori" />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map((cat) => (
+                <SelectItem key={cat.id} value={cat.name}>
+                  {cat.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Format</label>
+          <Select value={form.format} onValueChange={(v) => update('format', v as BookFormat)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(['PDF', 'DOC', 'PPT', 'XLS'] as BookFormat[]).map((f) => (
+                <SelectItem key={f} value={f}>
+                  {f}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Tahun *</label>
+          <Input
+            type="number"
+            value={form.year}
+            onChange={(e) => update('year', parseInt(e.target.value) || 0)}
+            className={errors.year ? 'border-red-400' : ''}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Halaman</label>
+          <Input
+            type="number"
+            value={form.pages}
+            onChange={(e) => update('pages', parseInt(e.target.value) || 0)}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Bahasa</label>
+          <Input value={form.language} onChange={(e) => update('language', e.target.value)} />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Rating (0-5)</label>
+          <Input
+            type="number"
+            step="0.1"
+            min="0"
+            max="5"
+            value={form.rating}
+            onChange={(e) => update('rating', parseFloat(e.target.value) || 0)}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">ISBN</label>
+          <Input value={form.isbn} onChange={(e) => update('isbn', e.target.value)} />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Penerbit</label>
+          <Input value={form.publisher} onChange={(e) => update('publisher', e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">URL Cover</label>
+          <Input value={form.coverImage} onChange={(e) => update('coverImage', e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Deskripsi</label>
+          <Textarea
+            rows={4}
+            value={form.description}
+            onChange={(e) => update('description', e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={form.featured}
+            onCheckedChange={(v) => update('featured', v)}
+          />
+          <label className="text-sm text-[#164e63]">Tampilkan sebagai buku unggulan</label>
+        </div>
+      </div>
+      <DialogFooter className="pt-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Batal
+        </Button>
+        <Button type="submit" className="bg-[#0e7490] hover:bg-[#155e75]">
+          <Save size={15} className="mr-1" />
+          {submitLabel}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   UPLOAD FILE TAB
+   ═══════════════════════════════════════════ */
+function UploadFileTab({ addActivity }: { addActivity: (type: ActivityItem['type'], message: string) => void }) {
+  // Keep localStorage in sync
+  useLocalStorage<Book[]>('neuro_books', []);
+  const [file, setFile] = useState<File | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'processing' | 'complete'>('idle');
+  const [progress, setProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Drag & drop handlers (same pattern as UploadModal)
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false); };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const f = e.dataTransfer.files[0];
+    if (f) processFile(f);
+  };
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) processFile(f);
+  };
+
+  function processFile(f: File) {
+    const validExts = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx'];
+    const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+    if (!validExts.includes(ext)) {
+      toast.error('Format tidak didukung. Gunakan PDF, Word, Excel, atau PowerPoint.');
+      return;
+    }
+    if (f.size > 10 * 1024 * 1024) {
+      toast.error('File terlalu besar. Maksimal 10MB.');
+      return;
+    }
+    setFile(f);
+  }
+
+  const simulateUpload = async () => {
+    setStatus('uploading');
+    for (let i = 0; i <= 100; i += 5) {
+      setProgress(i);
+      await new Promise(r => setTimeout(r, 100));
+    }
+    setStatus('complete');
+  };
+
+  const handlePublish = async () => {
+    if (!file) return;
+    await simulateUpload();
+    // Save to localStorage
+    const uploads = JSON.parse(localStorage.getItem('neuro_admin_uploads') || '[]');
+    uploads.push({ name: file.name, size: file.size, date: new Date().toISOString() });
+    localStorage.setItem('neuro_admin_uploads', JSON.stringify(uploads));
+    addActivity('book', `Upload file "${file.name}"`);
+    toast.success('File berhasil diupload!');
+  };
+
+  const reset = () => { setFile(null); setStatus('idle'); setProgress(0); };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+            <FileUp size={18} className="text-[#0e7490]" />
+            Upload File ke Perpustakaan
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Drag & Drop Zone */}
+          {!file ? (
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
+                isDragOver ? 'border-[#0e7490] bg-[#f0f9ff] scale-[1.01]' : 'border-[#0e7490]/30 hover:border-[#0e7490] hover:bg-[#f0f9ff]/30'
+              }`}
+            >
+              <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
+                isDragOver ? 'bg-[#0e7490] text-white' : 'bg-[#f0f9ff] text-[#0e7490]'
+              }`}>
+                <Upload size={28} />
+              </div>
+              <p className="text-sm font-medium text-[#164e63]">Drag & drop file di sini</p>
+              <p className="text-xs text-[#64748b] mt-1">PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX</p>
+              <p className="text-[10px] text-[#94a3b8] mt-2">Maksimal 10MB</p>
+              <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" onChange={handleFileChange} className="hidden" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* File Info */}
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-[#f0f9ff] border border-[#cffafe]">
+                <div className="w-12 h-12 rounded-lg bg-[#0e7490]/10 flex items-center justify-center">
+                  <FileText size={24} className="text-[#0e7490]" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-[#164e63]">{file.name}</p>
+                  <p className="text-xs text-[#64748b]">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={reset} className="text-red-500 hover:bg-red-50">
+                  <X size={16} />
+                </Button>
+              </div>
+              {/* Progress */}
+              {status !== 'idle' && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[#64748b]">{status === 'complete' ? 'Selesai!' : status === 'uploading' ? 'Mengupload...' : 'Memproses...'}</span>
+                    <span className="font-medium text-[#0e7490]">{progress}%</span>
+                  </div>
+                  <div className="h-2.5 bg-[#cffafe] rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-200 ${status === 'complete' ? 'bg-green-500' : 'bg-[#0e7490]'}`} style={{ width: `${progress}%` }} />
+                  </div>
+                </div>
+              )}
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                {status === 'idle' && (
+                  <>
+                    <Button variant="outline" onClick={reset} className="flex-1">Batal</Button>
+                    <Button onClick={handlePublish} className="flex-1 bg-[#0e7490] hover:bg-[#155e75]">
+                      <Upload size={16} className="mr-2" /> Upload File
+                    </Button>
+                  </>
+                )}
+                {status === 'complete' && (
+                  <Button onClick={reset} className="w-full bg-[#0e7490] hover:bg-[#155e75]">
+                    Upload File Lain
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent Uploads Table */}
+      <RecentUploadsTable />
+    </div>
+  );
+}
+
+// Recent uploads table
+function RecentUploadsTable() {
+  const [uploads] = useState<Array<{ name: string; size: number; date: string }>>(() => {
+    try { return JSON.parse(localStorage.getItem('neuro_admin_uploads') || '[]'); }
+    catch { return []; }
+  });
+
+  const formatDate = (iso: string) => new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+          <Clock size={18} className="text-[#0e7490]" />
+          File Terbaru Diupload
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {uploads.length === 0 ? (
+          <p className="text-sm text-[#64748b] text-center py-6">Belum ada file yang diupload</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-[#cffafe]">
+                <tr className="text-left text-[#64748b]">
+                  <th className="pb-2 font-medium">Nama File</th>
+                  <th className="pb-2 font-medium">Ukuran</th>
+                  <th className="pb-2 font-medium">Tanggal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {uploads.slice().reverse().slice(0, 20).map((u, i) => (
+                  <tr key={i} className="border-b border-[#cffafe]/50">
+                    <td className="py-2.5 text-[#164e63] flex items-center gap-2">
+                      <FileText size={14} className="text-[#0e7490]" /> {u.name}
+                    </td>
+                    <td className="py-2.5 text-[#64748b]">{(u.size / (1024 * 1024)).toFixed(2)} MB</td>
+                    <td className="py-2.5 text-[#64748b]">{formatDate(u.date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   PRESENTATION MODE - Fullscreen Case Reader
+   ═══════════════════════════════════════════ */
+interface PresentationModeProps {
+  isOpen: boolean;
+  onClose: () => void;
+  book?: Book | null;
+}
+
+function PresentationMode({ isOpen, onClose, book }: PresentationModeProps) {
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Sample slides for demo (would be loaded from actual file)
+  const slides = useMemo(() => {
+    if (!book) return [];
+    return [
+      { type: 'title', title: book.title, subtitle: book.author, category: book.category },
+      { type: 'overview', title: 'Ringkasan', content: book.description },
+      { type: 'details', title: 'Detail Publikasi', items: [
+        { label: 'Kategori', value: book.category },
+        { label: 'Format', value: book.format },
+        { label: 'Tahun', value: book.year.toString() },
+        { label: 'Halaman', value: book.pages.toString() },
+        { label: 'Bahasa', value: book.language },
+        { label: 'ISBN', value: book.isbn },
+        { label: 'Penerbit', value: book.publisher },
+      ]},
+      { type: 'stats', title: 'Statistik', items: [
+        { label: 'Rating', value: `${book.rating}/5.0` },
+        { label: 'Downloads', value: book.downloads.toLocaleString('id-ID') },
+      ]},
+      { type: 'end', title: 'Terima Kasih', subtitle: 'NeuroLibrary - Perpustakaan Digital Neurologi' },
+    ];
+  }, [book]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); setIsFullscreen(false); }
+      if (e.key === 'ArrowRight' || e.key === ' ') { setCurrentSlide(p => Math.min(p + 1, slides.length - 1)); }
+      if (e.key === 'ArrowLeft') { setCurrentSlide(p => Math.max(p - 1, 0)); }
+      if (e.key === 'f') { toggleFullscreen(); }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, onClose, slides.length]);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen().catch(() => {});
+      setIsFullscreen(false);
+    }
+  };
+
+  // Reset when opening
+  useEffect(() => { if (isOpen) setCurrentSlide(0); }, [isOpen]);
+
+  if (!isOpen || !book) return null;
+
+  const slide = slides[currentSlide];
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-[#0f172a] flex flex-col" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-4 py-3 bg-[#0f172a]/95 border-b border-white/10 text-white">
+        <div className="flex items-center gap-3">
+          <Monitor size={18} className="text-[#0e7490]" />
+          <span className="text-sm font-medium">{book.title}</span>
+          <span className="text-xs text-white/50">({currentSlide + 1} / {slides.length})</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={toggleFullscreen} className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition" title="Fullscreen (F)">
+            {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+          </button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-red-500/20 hover:text-red-400 flex items-center justify-center transition" title="Tutup (Esc)">
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Slide content */}
+      <div className="flex-1 flex items-center justify-center p-8 md:p-16">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentSlide}
+            initial={{ opacity: 0, x: 60 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -60 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="w-full max-w-4xl"
+          >
+            {/* Title Slide */}
+            {slide.type === 'title' && (
+              <div className="text-center text-white">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0e7490]/20 text-[#0e7490] text-sm mb-6">
+                  <Brain size={16} /> {slide.category}
+                </div>
+                <h1 className="text-3xl md:text-5xl font-bold mb-4 leading-tight">{slide.title}</h1>
+                <p className="text-lg text-white/60">{slide.subtitle}</p>
+              </div>
+            )}
+            {/* Overview Slide */}
+            {slide.type === 'overview' && (
+              <div className="text-white">
+                <h2 className="text-2xl md:text-3xl font-bold mb-6 flex items-center gap-2">
+                  <FileText size={24} className="text-[#0e7490]" /> {slide.title}
+                </h2>
+                <p className="text-lg leading-relaxed text-white/80 whitespace-pre-line">{slide.content}</p>
+              </div>
+            )}
+            {/* Details Slide */}
+            {slide.type === 'details' && (
+              <div className="text-white">
+                <h2 className="text-2xl font-bold mb-6">{slide.title}</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {slide.items?.map((item, i) => (
+                    <div key={i} className="flex justify-between items-center p-3 rounded-lg bg-white/5 border border-white/10">
+                      <span className="text-white/50 text-sm">{item.label}</span>
+                      <span className="text-white font-medium">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Stats Slide */}
+            {slide.type === 'stats' && (
+              <div className="text-white">
+                <h2 className="text-2xl font-bold mb-6">{slide.title}</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  {slide.items?.map((item, i) => (
+                    <div key={i} className="p-6 rounded-xl bg-gradient-to-br from-[#0e7490]/20 to-[#14b8a6]/10 border border-[#0e7490]/30 text-center">
+                      <p className="text-3xl font-bold text-[#0e7490]">{item.value}</p>
+                      <p className="text-sm text-white/50 mt-1">{item.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* End Slide */}
+            {slide.type === 'end' && (
+              <div className="text-center text-white">
+                <Brain size={48} className="mx-auto mb-4 text-[#0e7490]" />
+                <h2 className="text-3xl md:text-4xl font-bold mb-2">{slide.title}</h2>
+                <p className="text-white/50">{slide.subtitle}</p>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Navigation bar */}
+      <div className="flex items-center justify-center gap-3 px-4 py-3 bg-[#0f172a]/95 border-t border-white/10">
+        <button onClick={() => setCurrentSlide(p => Math.max(p - 1, 0))} disabled={currentSlide === 0} className="w-9 h-9 rounded-full border border-white/20 text-white hover:bg-white/10 disabled:opacity-30 flex items-center justify-center transition">
+          <ChevronLeft size={16} />
+        </button>
+        <div className="flex gap-1.5">
+          {slides.map((_, i) => (
+            <button key={i} onClick={() => setCurrentSlide(i)} className={`w-2 h-2 rounded-full transition-all ${i === currentSlide ? 'bg-[#0e7490] w-6' : 'bg-white/30 hover:bg-white/50'}`} />
+          ))}
+        </div>
+        <button onClick={() => setCurrentSlide(p => Math.min(p + 1, slides.length - 1))} disabled={currentSlide === slides.length - 1} className="w-9 h-9 rounded-full border border-white/20 text-white hover:bg-white/10 disabled:opacity-30 flex items-center justify-center transition">
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
+      {/* Keyboard hint */}
+      <div className="absolute bottom-14 left-1/2 -translate-x-1/2 text-[10px] text-white/30">
+        &larr; &rarr; navigasi &middot; Spasi next &middot; F fullscreen &middot; Esc tutup
+      </div>
+    </div>
+  );
+}

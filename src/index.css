@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 199 89% 20%;
+    --card: 0 0% 100%;
+    --card-foreground: 199 89% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 199 89% 20%;
+    --primary: 193 82% 31%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 173 80% 40%;
+    --secondary-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --muted: 200 100% 97%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 100%;
+    --border: 187 94% 89%;
+    --input: 187 94% 89%;
+    --ring: 193 82% 31%;
+    --radius: 0.625rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 197 96% 11%;
+    --foreground: 187 94% 94%;
+    --card: 197 82% 25%;
+    --card-foreground: 187 94% 94%;
+    --popover: 197 82% 25%;
+    --popover-foreground: 187 94% 94%;
+    --primary: 187 94% 94%;
+    --primary-foreground: 197 96% 11%;
+    --secondary: 173 80% 40%;
+    --secondary-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --muted: 197 82% 25%;
+    --muted-foreground: 186 94% 82%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 100%;
+    --border: 193 82% 28%;
+    --input: 193 82% 28%;
+    --ring: 187 94% 94%;
+    --sidebar-background: 197 96% 11%;
+    --sidebar-foreground: 187 94% 94%;
+    --sidebar-primary: 193 82% 31%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 197 82% 25%;
+    --sidebar-accent-foreground: 187 94% 94%;
+    --sidebar-border: 193 82% 28%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-bg-light text-text-light font-body antialiased;
+  }
+
+  body.dark {
+    @apply bg-bg-dark text-text-dark;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
