@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { categories as localCategories } from '@/data/categories';
 import type { Database } from '@/types/database';

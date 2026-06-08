@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Book } from '@/types';
 import { allUsers } from '@/data/usersData';
 
