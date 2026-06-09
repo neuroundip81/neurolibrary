@@ -35,6 +35,7 @@ export default function Home() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSubmitted, setNewsletterSubmitted] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const searchRef = useRef<HTMLDivElement>(null);
 
   const { bookmarks, toggleBookmark } = useBookmarks();
@@ -109,8 +110,15 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Listen for book updates from UploadModal
+  useEffect(() => {
+    const handler = () => setRefreshKey((k) => k + 1);
+    window.addEventListener('booksUpdated', handler);
+    return () => window.removeEventListener('booksUpdated', handler);
+  }, []);
+
   // Get all books including uploaded ones from localStorage
-  const allBooks = useMemo(() => getAllBooks(), []);
+  const allBooks = useMemo(() => getAllBooks(), [refreshKey]);
   const mergedFeaturedBooks = useMemo(() => {
     const featured = allBooks.filter((b) => b.featured);
     return featured.length > 0 ? featured : staticFeaturedBooks;

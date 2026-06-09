@@ -1,11 +1,11 @@
 // @ts-nocheck
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database';
+import { ENV } from '@/config/env';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = ENV.SUPABASE_URL;
+const supabaseKey = ENV.SUPABASE_ANON_KEY;
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
 export const isSupabaseConfigured = (): boolean => {
   return !!(supabaseUrl && supabaseKey && supabaseUrl.startsWith('http'));

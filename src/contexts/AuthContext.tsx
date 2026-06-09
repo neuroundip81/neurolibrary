@@ -185,7 +185,8 @@ function saveCurrentUser(user: AuthUser | null): void {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(loadCurrentUser);
   const isLoggedIn = user !== null;
-  const isAdmin = user?.role === 'admin';
+  // Admin detection by role or email
+  const isAdmin = user?.role === 'admin' || user?.email === 'admin@neurolibrary.id';
 
   // Sync user state with localStorage on mount
   useEffect(() => {

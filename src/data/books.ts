@@ -1,5 +1,7 @@
+// @ts-nocheck
 import type { Book } from '@/types';
 import booksData from './books_data.json';
+import { supabase } from '@/lib/supabase';
 
 // Map JSON category slugs to human-readable names
 const CATEGORY_NAMES: Record<string, string> = {
@@ -98,3 +100,19 @@ export const sortBooks = (bookList: Book[], sortBy: string): Book[] => {
       return sorted.sort((a, b) => b.year - a.year);
   }
 };
+
+export async function syncBooksWithSupabase(): Promise<Book[]> {
+  try {
+    const { data, error } = await supabase.from('books').select('*');
+    if (error) throw error;
+    if (data && data.length > 0) {
+      // Save to localStorage for offline use
+      localStorage.setItem('neuro_books_cache', JSON.stringify(data));
+      return data as Book[];
+    }
+  } catch (err) {
+    console.log('Supabase sync failed, using local data:', err);
+  }
+  // Fallback to local data
+  return getAllBooks();
+}

@@ -74,6 +74,7 @@ import {
   FileDown,
   SquareCheck,
   Newspaper,
+  Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -379,20 +380,22 @@ function useAdminGuard() {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    const raw = localStorage.getItem('neuro_user');
+    // Check both neuro_current_user (from AuthContext) and neuro_user
+    const raw = localStorage.getItem('neuro_current_user') || localStorage.getItem('neuro_user');
     if (raw) {
       try {
         const user = JSON.parse(raw);
-        if (user.role === 'admin') {
+        // Admin by role or email
+        if (user.role === 'admin' || user.email === 'admin@neurolibrary.id') {
           setIsAdmin(true);
         } else {
-          navigate('/');
+          setIsAdmin(false);
         }
       } catch {
-        navigate('/');
+        setIsAdmin(false);
       }
     } else {
-      navigate('/');
+      setIsAdmin(false);
     }
     setChecked(true);
   }, [navigate]);
@@ -471,7 +474,23 @@ export default function Admin() {
     );
   }
 
-  if (!isAdmin) return null;
+  if (!isAdmin) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#f0f9ff]">
+        <div className="text-center max-w-md px-6">
+          <AlertCircle size={64} className="mx-auto text-red-400 mb-4" />
+          <h1 className="text-2xl font-bold text-[#164e63] mb-2">Akses Ditolak</h1>
+          <p className="text-[#64748b] mb-6">Anda tidak memiliki izin untuk mengakses halaman admin. Silakan login sebagai admin.</p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-6 py-2.5 rounded-lg bg-[#0e7490] text-white font-medium hover:bg-[#155e75] transition-colors"
+          >
+            Kembali ke Beranda
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#f0f9ff] overflow-hidden">
@@ -1446,6 +1465,8 @@ function UsersTab({
   const [viewUser, setViewUser] = useState<AdminUser | null>(null);
   const [editRoleUser, setEditRoleUser] = useState<AdminUser | null>(null);
   const [newRole, setNewRole] = useState<'admin' | 'user'>('user');
+  const [resetPasswordUser, setResetPasswordUser] = useState<AdminUser | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const perPage = 7;
 
   const handleSort = (field: 'name' | 'role' | 'date') => {
@@ -1515,6 +1536,40 @@ function UsersTab({
     addActivity('user', `Menghapus pengguna "${deleteUser.name}"`);
     toast.success('Pengguna berhasil dihapus');
     setDeleteUser(null);
+  };
+
+  const handleResetPassword = () => {
+    if (!resetPasswordUser || !newPassword.trim()) return;
+    if (newPassword.length < 6) {
+      toast.error('Password minimal 6 karakter');
+      return;
+    }
+    // Update password in localStorage (neuro_users)
+    try {
+      const stored = localStorage.getItem('neuro_users');
+      if (stored) {
+        const allUsers = JSON.parse(stored);
+        const updated = allUsers.map((u: any) =>
+          u.id === resetPasswordUser.id ? { ...u, password: btoa(newPassword.trim() + '_neuro_salt') } : u,
+        );
+        localStorage.setItem('neuro_users', JSON.stringify(updated));
+      }
+      // Also update neuro_current_user if it's the current user
+      const currentRaw = localStorage.getItem('neuro_current_user');
+      if (currentRaw) {
+        const current = JSON.parse(currentRaw);
+        if (current.id === resetPasswordUser.id) {
+          current.password = btoa(newPassword.trim() + '_neuro_salt');
+          localStorage.setItem('neuro_current_user', JSON.stringify(current));
+        }
+      }
+      addActivity('user', `Reset password untuk "${resetPasswordUser.name}"`);
+      toast.success('Password berhasil direset!');
+      setResetPasswordUser(null);
+      setNewPassword('');
+    } catch {
+      toast.error('Gagal mereset password');
+    }
   };
 
   const SortIcon = ({ field }: { field: 'name' | 'role' | 'date' }) => (
@@ -1638,6 +1693,18 @@ function UsersTab({
                             title="Edit role"
                           >
                             <Pencil size={15} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => {
+                              setResetPasswordUser(user);
+                              setNewPassword('');
+                            }}
+                            className="h-8 w-8 text-amber-500 hover:bg-amber-50"
+                            title="Reset password"
+                          >
+                            <Lock size={15} />
                           </Button>
                           <Button
                             variant="ghost"
@@ -1787,6 +1854,46 @@ function UsersTab({
             <Button variant="destructive" onClick={handleDelete}>
               <Trash2 size={15} className="mr-1" />
               Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetPasswordUser} onOpenChange={() => { setResetPasswordUser(null); setNewPassword(''); }}>
+        <DialogContent className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63] flex items-center gap-2">
+              <Lock size={20} className="text-amber-500" />
+              Reset Password
+            </DialogTitle>
+            <DialogDescription>
+              Atur ulang password untuk pengguna &quot;{resetPasswordUser?.name}&quot;
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="block text-sm font-medium text-[#164e63] mb-1.5">Password Baru</label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Minimal 6 karakter"
+                className="w-full"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setResetPasswordUser(null); setNewPassword(''); }}>
+              Batal
+            </Button>
+            <Button
+              onClick={handleResetPassword}
+              disabled={!newPassword.trim() || newPassword.length < 6}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              <Lock size={15} className="mr-1" />
+              Reset Password
             </Button>
           </DialogFooter>
         </DialogContent>

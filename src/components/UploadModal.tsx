@@ -287,6 +287,9 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
     // Also update state
     setBooks(allBooks);
 
+    // Notify other components that books have been updated
+    window.dispatchEvent(new Event('booksUpdated'));
+
     // Store file as base64 (for demo) with size check
     if (sourceType === 'upload' && file && file.size <= 2 * 1024 * 1024) {
       try {
