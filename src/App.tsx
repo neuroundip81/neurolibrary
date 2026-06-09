@@ -7,6 +7,7 @@ import Home from '@/pages/Home';
 import BookDetail from '@/pages/BookDetail';
 import Bookmarks from '@/pages/Bookmarks';
 import Profile from '@/pages/Profile';
+import Settings from '@/pages/Settings';
 import About from '@/pages/About';
 
 const Admin = lazy(() => import('@/pages/Admin'));
@@ -47,6 +48,7 @@ function AppRoutes() {
               <Route path="/book/:id" element={<BookDetail />} />
               <Route path="/bookmarks" element={<Bookmarks />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/settings" element={<Settings />} />
               <Route path="/about" element={<About />} />
             </Routes>
           </Layout>

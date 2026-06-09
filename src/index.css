@@ -73,10 +73,10 @@
   }
 
   body {
-    @apply bg-bg-light text-text-light font-body antialiased;
+    @apply bg-background text-foreground font-body antialiased transition-colors duration-300;
   }
 
-  body.dark {
+  .dark body {
     @apply bg-bg-dark text-text-dark;
   }
 

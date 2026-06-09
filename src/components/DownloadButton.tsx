@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { Download, Check, Loader2 } from 'lucide-react';
+import { Download, Check, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface DownloadButtonProps {
@@ -8,6 +8,7 @@ interface DownloadButtonProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   onDownloadComplete?: () => void;
+  externalUrl?: string;
 }
 
 export default function DownloadButton({
@@ -16,6 +17,7 @@ export default function DownloadButton({
   size = 'md',
   className = '',
   onDownloadComplete,
+  externalUrl,
 }: DownloadButtonProps) {
   const [count, setCount] = useState(initialCount);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -81,6 +83,27 @@ export default function DownloadButton({
     if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
     return n.toString();
   };
+
+  // External link mode: render as link button
+  if (externalUrl) {
+    return (
+      <a
+        href={externalUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`relative overflow-hidden inline-flex items-center justify-center rounded-xl font-semibold transition-all duration-200 ${sizeClasses[size]} ${className} bg-[#0e7490] text-white hover:bg-[#155e75] hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0`}
+        aria-label="Baca Online"
+      >
+        <span className="relative z-10 flex items-center gap-2">
+          <ExternalLink size={iconSizes[size]} />
+          <span className="flex items-center gap-1.5">
+            Baca Online
+            <span className="opacity-80">({formatCount(initialCount)})</span>
+          </span>
+        </span>
+      </a>
+    );
+  }
 
   return (
     <button

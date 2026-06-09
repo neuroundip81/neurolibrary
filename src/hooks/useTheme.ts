@@ -5,7 +5,7 @@ type Theme = 'light' | 'dark';
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'light';
-    const stored = window.localStorage.getItem('theme') as Theme | null;
+    const stored = window.localStorage.getItem('neuro_theme') as Theme | null;
     if (stored) return stored;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
@@ -17,7 +17,7 @@ export function useTheme() {
     } else {
       root.classList.remove('dark');
     }
-    window.localStorage.setItem('theme', theme);
+    window.localStorage.setItem('neuro_theme', theme);
   }, [theme]);
 
   const toggleTheme = useCallback(() => {

@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { X, Download, Calendar, FileText, Globe, Hash, Share2, MessageSquare, Send } from 'lucide-react';
+import { X, Download, Calendar, FileText, Globe, Hash, Share2, MessageSquare, Send, ExternalLink } from 'lucide-react';
 import type { Book, Comment } from '@/types';
 import StarRating from './StarRating';
 import BookmarkButton from './BookmarkButton';
@@ -144,10 +144,22 @@ export default function BookDetailModal({
                 />
               </div>
               <div className="flex gap-2 mt-4">
-                <button className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#0e7490] text-white text-sm font-medium transition-all hover:bg-[#155e75]">
-                  <Download size={16} />
-                  Download
-                </button>
+                {book.externalUrl ? (
+                  <a
+                    href={book.externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#0e7490] text-white text-sm font-medium transition-all hover:bg-[#155e75]"
+                  >
+                    <ExternalLink size={16} />
+                    Baca Online
+                  </a>
+                ) : (
+                  <button className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#0e7490] text-white text-sm font-medium transition-all hover:bg-[#155e75]">
+                    <Download size={16} />
+                    Download
+                  </button>
+                )}
                 <BookmarkButton
                   isBookmarked={isBookmarked}
                   onToggle={() => onToggleBookmark(book.id)}

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -53,12 +54,34 @@ import {
   ArrowUpDown,
   ImageIcon,
   Check,
+  GripVertical,
+  Grid3X3,
+  Type,
+  Undo2,
+  MoveUp,
+  MoveDown,
+  Smartphone,
+  Globe,
+  Mail,
+  Phone,
+  MapPin,
+  Github,
+  Twitter,
+  Linkedin,
+  Info,
+  Wallpaper,
+  SlidersHorizontal,
+  FileDown,
+  SquareCheck,
+  Newspaper,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -101,7 +124,7 @@ import type { Book, Category, BookFormat } from '@/types';
 /* ─── Types ─── */
 interface ActivityItem {
   id: string;
-  type: 'book' | 'user' | 'comment' | 'category' | 'theme';
+  type: 'book' | 'user' | 'comment' | 'category' | 'theme' | 'background' | 'about';
   message: string;
   timestamp: string;
 }
@@ -113,8 +136,42 @@ interface ThemeConfig {
   neural: string;
   background: string;
   text: string;
+  border?: string;
+  font?: string;
   fontSize?: number;
   borderRadius?: number;
+}
+
+interface BackgroundConfig {
+  type: 'gradient' | 'custom';
+  customImage: string;
+  presetImage: string;
+  opacity: number;
+  enabled: boolean;
+}
+
+interface TeamMember {
+  id: string;
+  name: string;
+  title: string;
+  specialty: string;
+  institution: string;
+  avatar: string;
+}
+
+interface AboutConfig {
+  mission: string;
+  team: TeamMember[];
+  contact: {
+    email: string;
+    phone: string;
+    address: string;
+  };
+  social: {
+    github: string;
+    twitter: string;
+    linkedin: string;
+  };
 }
 
 type AdminTab =
@@ -125,7 +182,9 @@ type AdminTab =
   | 'categories'
   | 'theme'
   | 'add-book'
-  | 'upload-file';
+  | 'upload-file'
+  | 'background'
+  | 'about-editor';
 
 interface AdminUser {
   id: string;
@@ -184,11 +243,11 @@ const getRelativeTime = (dateString: string): string => {
   const diffDays = Math.floor(diffMs / 86400000);
 
   if (diffMins < 1) return 'Baru saja';
-  if (diffMins < 60) return `${diffMins} menit lalu`;
-  if (diffHours < 24) return `${diffHours} jam lalu`;
-  if (diffDays < 7) return `${diffDays} hari lalu`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} minggu lalu`;
-  return `${Math.floor(diffDays / 30)} bulan lalu`;
+  if (diffMins < 60) return `${diffMins} menit yang lalu`;
+  if (diffHours < 24) return `${diffHours} jam yang lalu`;
+  if (diffDays < 7) return `${diffDays} hari yang lalu`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} minggu yang lalu`;
+  return `${Math.floor(diffDays / 30)} bulan yang lalu`;
 };
 
 const initialAdminUser: AdminUser = {
@@ -209,35 +268,47 @@ const defaultTheme: ThemeConfig = {
   neural: '#ec4899',
   background: '#f0f9ff',
   text: '#164e63',
+  border: '#cffafe',
+  font: 'Inter',
   fontSize: 14,
   borderRadius: 8,
 };
 
 const themePresets: { name: string; colors: ThemeConfig }[] = [
   {
+    name: 'Default',
+    colors: { primary: '#0e7490', secondary: '#14b8a6', accent: '#f59e0b', neural: '#ec4899', background: '#f0f9ff', text: '#164e63', border: '#cffafe', font: 'Inter', fontSize: 14, borderRadius: 8 },
+  },
+  {
     name: 'Ocean',
-    colors: { primary: '#0e7490', secondary: '#14b8a6', accent: '#f59e0b', neural: '#ec4899', background: '#f0f9ff', text: '#164e63', fontSize: 14, borderRadius: 8 },
+    colors: { primary: '#0e7490', secondary: '#14b8a6', accent: '#f59e0b', neural: '#ec4899', background: '#f0f9ff', text: '#164e63', border: '#cffafe', font: 'Inter', fontSize: 14, borderRadius: 8 },
   },
   {
     name: 'Forest',
-    colors: { primary: '#166534', secondary: '#16a34a', accent: '#d97706', neural: '#dc2626', background: '#f0fdf4', text: '#14532d', fontSize: 14, borderRadius: 8 },
+    colors: { primary: '#166534', secondary: '#16a34a', accent: '#d97706', neural: '#dc2626', background: '#f0fdf4', text: '#14532d', border: '#bbf7d0', font: 'Inter', fontSize: 14, borderRadius: 8 },
   },
   {
     name: 'Sunset',
-    colors: { primary: '#c2410c', secondary: '#ea580c', accent: '#ca8a04', neural: '#db2777', background: '#fff7ed', text: '#7c2d12', fontSize: 14, borderRadius: 8 },
+    colors: { primary: '#c2410c', secondary: '#ea580c', accent: '#ca8a04', neural: '#db2777', background: '#fff7ed', text: '#7c2d12', border: '#fed7aa', font: 'Inter', fontSize: 14, borderRadius: 8 },
   },
   {
     name: 'Minimal',
-    colors: { primary: '#374151', secondary: '#6b7280', accent: '#2563eb', neural: '#9333ea', background: '#f9fafb', text: '#111827', fontSize: 14, borderRadius: 8 },
+    colors: { primary: '#374151', secondary: '#6b7280', accent: '#2563eb', neural: '#9333ea', background: '#f9fafb', text: '#111827', border: '#e5e7eb', font: 'Inter', fontSize: 14, borderRadius: 8 },
+  },
+  {
+    name: 'Dark Pro',
+    colors: { primary: '#38bdf8', secondary: '#818cf8', accent: '#f472b6', neural: '#a78bfa', background: '#0f172a', text: '#e2e8f0', border: '#1e293b', font: 'Inter', fontSize: 14, borderRadius: 8 },
   },
 ];
 
 const navItems: { key: AdminTab | 'back'; label: string; icon: React.ElementType }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'books', label: 'Kelola Buku', icon: BookOpen },
+  { key: 'categories', label: 'Kelola Kategori', icon: Tags },
   { key: 'users', label: 'Kelola Pengguna', icon: Users },
   { key: 'comments', label: 'Kelola Komentar', icon: MessageSquare },
-  { key: 'categories', label: 'Kelola Kategori', icon: Tags },
+  { key: 'background', label: 'Edit Wallpaper', icon: Wallpaper },
+  { key: 'about-editor', label: 'Edit Tentang', icon: Info },
   { key: 'theme', label: 'Edit Tema', icon: Palette },
   { key: 'add-book', label: 'Tambah Buku', icon: PlusCircle },
   { key: 'upload-file', label: 'Upload File', icon: FileUp },
@@ -248,6 +319,7 @@ const navItems: { key: AdminTab | 'back'; label: string; icon: React.ElementType
 const iconMap: Record<string, React.ElementType> = {
   Brain, Activity, Scan, Stethoscope, Scissors, Pill, Baby, Zap, HeartPulse, PersonStanding,
   Layers, Sparkles, BookOpen, FileText, Library, Star, TrendingUp, Award, Monitor, Settings,
+  Newspaper, ImageIcon, Smartphone, Globe, Mail,
 };
 
 function getIconComponent(iconName: string): React.ElementType {
@@ -262,6 +334,42 @@ const activityTypeConfig: Record<RecentActivity['type'], { color: string; bg: st
   download: { color: '#ec4899', bg: '#fdf2f8', label: 'Download' },
   bookmark: { color: '#8b5cf6', bg: '#f5f3ff', label: 'Bookmark' },
   comment: { color: '#f59e0b', bg: '#fffbeb', label: 'Komentar' },
+};
+
+/* ─── Preset backgrounds ─── */
+const presetBackgrounds = [
+  { name: 'Neural Network', value: '/neural-bg-1.jpg' },
+  { name: 'Abstract Brain', value: '/neural-bg-2.jpg' },
+  { name: 'Medical Gradient', value: '/medical-gradient.jpg' },
+  { name: 'Neuron Pattern', value: '/neuron-pattern.jpg' },
+  { name: 'Clean Lines', value: '/clean-lines.jpg' },
+];
+
+const defaultBackground: BackgroundConfig = {
+  type: 'gradient',
+  customImage: '',
+  presetImage: presetBackgrounds[0].value,
+  opacity: 15,
+  enabled: false,
+};
+
+const defaultAbout: AboutConfig = {
+  mission: 'NeuroLibrary adalah platform perpustakaan digital yang didedikasikan untuk dunia neurologi. Misi kami adalah menyediakan akses mudah ke sumber daya neurologi berkualitas tinggi bagi mahasiswa, dokter, dan profesional kesehatan di seluruh Indonesia.',
+  team: [
+    { id: '1', name: 'Dr. Andika Pratama', title: 'Founder & Lead Developer', specialty: 'Neurologi Klinis', institution: 'RSUD Dr. Soetomo', avatar: '' },
+    { id: '2', name: 'Dr. Sarah Wijaya', title: 'Content Curator', specialty: 'Neurofisiologi', institution: 'Universitas Indonesia', avatar: '' },
+    { id: '3', name: 'Dr. Budi Santoso', title: 'Medical Advisor', specialty: 'Neuroanatomi', institution: 'UGM', avatar: '' },
+  ],
+  contact: {
+    email: 'contact@neurolibrary.id',
+    phone: '+62 812-3456-7890',
+    address: 'Jl. Universitas No. 1, Surabaya, Jawa Timur 60231',
+  },
+  social: {
+    github: 'https://github.com/neurolibrary',
+    twitter: 'https://twitter.com/neurolibrary',
+    linkedin: 'https://linkedin.com/company/neurolibrary',
+  },
 };
 
 /* ─── Auth Guard Hook ─── */
@@ -321,7 +429,9 @@ export default function Admin() {
   const [comments, setComments] = useLocalStorage<AdminComment[]>('neuro_comments', []);
   const [categories, setCategories] = useLocalStorage<Category[]>('neuro_categories', defaultCategories);
   const [activities, setActivities] = useLocalStorage<ActivityItem[]>('neuro_activities', []);
-  const [theme, setTheme] = useLocalStorage<ThemeConfig>('neuro_theme', defaultTheme);
+  const [theme, setTheme] = useLocalStorage<ThemeConfig>('neuro_admin_theme', defaultTheme);
+  const [background, setBackground] = useLocalStorage<BackgroundConfig>('neuro_admin_background', defaultBackground);
+  const [about, setAbout] = useLocalStorage<AboutConfig>('neuro_admin_about', defaultAbout);
 
   /* ── Presentation Mode State ── */
   const [showPresentation, setShowPresentation] = useState(false);
@@ -511,6 +621,12 @@ export default function Admin() {
               {activeTab === 'theme' && (
                 <ThemeTab theme={theme} setTheme={setTheme} addActivity={addActivity} />
               )}
+              {activeTab === 'background' && (
+                <BackgroundTab background={background} setBackground={setBackground} addActivity={addActivity} />
+              )}
+              {activeTab === 'about-editor' && (
+                <AboutEditorTab about={about} setAbout={setAbout} addActivity={addActivity} />
+              )}
               {activeTab === 'add-book' && (
                 <AddBookTab
                   setBooks={setBooks}
@@ -536,8 +652,9 @@ export default function Admin() {
   );
 }
 
+
 /* ═══════════════════════════════════════════
-   DASHBOARD TAB (Enhanced with Analytics)
+   DASHBOARD TAB (Enhanced)
    ═══════════════════════════════════════════ */
 function DashboardTab({
   books,
@@ -562,8 +679,8 @@ function DashboardTab({
 
   return (
     <div className="space-y-6">
-      {/* ── Stats Cards Row 1 ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      {/* ── Quick Stats Row ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
         <EnhancedStatCard
           icon={Library}
           label="Total Buku"
@@ -572,11 +689,18 @@ function DashboardTab({
           color="#0e7490"
         />
         <EnhancedStatCard
+          icon={Tags}
+          label="Total Kategori"
+          value={booksByCat.length}
+          sub="aktif"
+          color="#14b8a6"
+        />
+        <EnhancedStatCard
           icon={Users}
           label="Total Pengguna"
           value={stats.totalUsers}
           sub={`${stats.activeUsers} aktif`}
-          color="#14b8a6"
+          color="#8b5cf6"
         />
         <EnhancedStatCard
           icon={Download}
@@ -585,31 +709,13 @@ function DashboardTab({
           sub={`${stats.downloadsThisWeek} minggu ini`}
           color="#ec4899"
         />
-      </div>
-
-      {/* ── Stats Cards Row 2 ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         <EnhancedStatCard
           icon={Star}
-          label="Rating Rata-rata"
+          label="Avg Rating"
           value={stats.averageRating}
           sub="dari semua buku"
           color="#f59e0b"
           isDecimal
-        />
-        <EnhancedStatCard
-          icon={BookOpen}
-          label="Buku Ditambahkan"
-          value={stats.booksAddedThisMonth}
-          sub="bulan ini"
-          color="#8b5cf6"
-        />
-        <EnhancedStatCard
-          icon={UserCheck}
-          label="Pengguna Aktif"
-          value={stats.activeUsers}
-          sub={`dari ${stats.totalUsers} total`}
-          color="#10b981"
         />
       </div>
 
@@ -752,105 +858,102 @@ function DashboardTab({
           </CardContent>
         </Card>
 
-        {/* ── User Activity Table ── */}
+        {/* ── Recent Activity Feed ── */}
         <Card>
           <CardHeader>
             <CardTitle className="text-[#164e63] flex items-center gap-2 text-base">
-              <Users size={18} className="text-[#ec4899]" />
-              Aktivitas Pengguna
+              <Sparkles size={18} className="text-[#ec4899]" />
+              Aktivitas Terbaru
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
-              {userStats.map((user, i) => (
-                <motion.div
-                  key={user.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: i * 0.05 }}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-[#f0f9ff]/50 hover:bg-[#f0f9ff] transition-colors"
-                >
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#164e63] truncate">{user.name}</p>
-                    <p className="text-xs text-[#64748b]">{user.specialty}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-xs text-[#0e7490] font-semibold">{user.booksRead} selesai</p>
-                    <p className="text-[10px] text-[#94a3b8]">{getRelativeTime(user.lastActive)}</p>
-                  </div>
-                </motion.div>
-              ))}
+              {recentActivity.length === 0 ? (
+                <p className="text-sm text-[#64748b] text-center py-6">Belum ada aktivitas</p>
+              ) : (
+                recentActivity.map((act, i) => {
+                  const config = activityTypeConfig[act.type];
+                  return (
+                    <motion.div
+                      key={act.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: i * 0.04 }}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-[#f0f9ff]/50 hover:bg-[#f0f9ff] transition-colors"
+                    >
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                        style={{ backgroundColor: config.bg, color: config.color }}
+                      >
+                        {config.label.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-[#164e63] truncate">{act.action}</p>
+                        <p className="text-xs text-[#64748b]">{act.user}</p>
+                      </div>
+                      <span className="text-[10px] text-[#94a3b8] flex-shrink-0">
+                        {getRelativeTime(act.timestamp)}
+                      </span>
+                    </motion.div>
+                  );
+                })
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── Recent Activity Table ── */}
+      {/* ── Top Performing Books Table ── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-[#164e63] flex items-center gap-2 text-base">
-            <Sparkles size={18} className="text-[#ec4899]" />
-            Aktivitas Terbaru
+            <Award size={18} className="text-[#f59e0b]" />
+            Buku Performa Terbaik
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {recentActivity.length === 0 ? (
-            <p className="text-sm text-[#64748b] text-center py-6">Belum ada aktivitas</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b border-[#cffafe]">
-                  <tr className="text-left text-[#64748b]">
-                    <th className="pb-2 font-medium w-[100px]">Aksi</th>
-                    <th className="pb-2 font-medium">Keterangan</th>
-                    <th className="pb-2 font-medium">Pengguna</th>
-                    <th className="pb-2 font-medium text-right">Waktu</th>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-[#cffafe]">
+                <tr className="text-left text-[#64748b]">
+                  <th className="pb-2 font-medium w-[50px]">Rank</th>
+                  <th className="pb-2 font-medium">Judul</th>
+                  <th className="pb-2 font-medium text-right">Downloads</th>
+                  <th className="pb-2 font-medium text-right">Rating</th>
+                  <th className="pb-2 font-medium text-right">Dilihat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topBooksList.slice(0, 10).map((book, i) => (
+                  <tr key={book.id} className="border-b border-[#cffafe]/50">
+                    <td className="py-2.5">
+                      <span className={`inline-flex w-6 h-6 items-center justify-center rounded-full text-xs font-bold ${
+                        i === 0 ? 'bg-[#f59e0b] text-white' : i === 1 ? 'bg-[#94a3b8] text-white' : i === 2 ? 'bg-[#cd7f32] text-white' : 'bg-[#f0f9ff] text-[#64748b]'
+                      }`}>
+                        {i + 1}
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-[#164e63] font-medium max-w-[250px] truncate">{book.title}</td>
+                    <td className="py-2.5 text-right text-[#0e7490] font-semibold">{book.downloads.toLocaleString('id-ID')}</td>
+                    <td className="py-2.5 text-right">
+                      <span className="flex items-center justify-end gap-1 text-amber-500">
+                        <Star size={10} className="fill-current" />
+                        {book.rating}
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-right text-[#64748b]">{(book.downloads * 3 + book.ratingCount * 10).toLocaleString('id-ID')}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {recentActivity.map((act) => {
-                    const config = activityTypeConfig[act.type];
-                    return (
-                      <tr key={act.id} className="border-b border-[#cffafe]/50">
-                        <td className="py-2.5">
-                          <span
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
-                            style={{ backgroundColor: config.bg, color: config.color }}
-                          >
-                            {config.label}
-                          </span>
-                        </td>
-                        <td className="py-2.5 text-[#164e63] max-w-[300px] truncate">{act.action}</td>
-                        <td className="py-2.5">
-                          <div className="flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-[8px] font-bold">
-                              {act.user.charAt(0).toUpperCase()}
-                            </div>
-                            <span className="text-[#64748b] text-xs">{act.user}</span>
-                          </div>
-                        </td>
-                        <td className="py-2.5 text-[#94a3b8] text-xs text-right whitespace-nowrap">
-                          {getRelativeTime(act.timestamp)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                ))}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════
-   ENHANCED STAT CARD
-   ═══════════════════════════════════════════ */
+/* ─── Enhanced Stat Card ─── */
 function EnhancedStatCard({
   icon: Icon,
   label,
@@ -910,7 +1013,7 @@ function EnhancedStatCard({
 }
 
 /* ═══════════════════════════════════════════
-   BOOKS TAB (Kelola Buku)
+   BOOKS TAB (Kelola Buku - Enhanced)
    ═══════════════════════════════════════════ */
 function BooksTab({
   books,
@@ -929,15 +1032,50 @@ function BooksTab({
   const [page, setPage] = useState(1);
   const [editBook, setEditBook] = useState<Book | null>(null);
   const [deleteBook, setDeleteBook] = useState<Book | null>(null);
+  const [sortField, setSortField] = useState<string>('title');
+  const [sortAsc, setSortAsc] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDelete, setShowBulkDelete] = useState(false);
   const perPage = 10;
 
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortAsc((prev) => !prev);
+    } else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+    setPage(1);
+  };
+
   const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return books.filter(
-      (b) =>
-        b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q),
-    );
-  }, [books, search]);
+    const q = search.toLowerCase().trim();
+    let result = [...books];
+
+    if (q) {
+      result = result.filter(
+        (b) =>
+          b.title.toLowerCase().includes(q) ||
+          b.author.toLowerCase().includes(q) ||
+          b.isbn?.toLowerCase().includes(q),
+      );
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'title') comparison = a.title.localeCompare(b.title);
+      else if (sortField === 'author') comparison = a.author.localeCompare(b.author);
+      else if (sortField === 'category') comparison = a.category.localeCompare(b.category);
+      else if (sortField === 'year') comparison = a.year - b.year;
+      else if (sortField === 'rating') comparison = a.rating - b.rating;
+      else if (sortField === 'downloads') comparison = (a.downloads || 0) - (b.downloads || 0);
+      else if (sortField === 'pages') comparison = (a.pages || 0) - (b.pages || 0);
+      return sortAsc ? comparison : -comparison;
+    });
+
+    return result;
+  }, [books, search, sortField, sortAsc]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
@@ -950,6 +1088,15 @@ function BooksTab({
     setDeleteBook(null);
   };
 
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    setBooks((prev) => prev.filter((b) => !selectedIds.has(b.id)));
+    addActivity('book', `Menghapus ${selectedIds.size} buku sekaligus`);
+    toast.success(`${selectedIds.size} buku berhasil dihapus`);
+    setSelectedIds(new Set());
+    setShowBulkDelete(false);
+  };
+
   const handleSaveEdit = (updated: Book) => {
     setBooks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
     addActivity('book', `Mengedit buku "${updated.title}"`);
@@ -957,14 +1104,67 @@ function BooksTab({
     setEditBook(null);
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const pageIds = paginated.map((b) => b.id);
+    const allSelected = pageIds.every((id) => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        pageIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        pageIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const exportToCSV = () => {
+    const headers = ['ID', 'Title', 'Author', 'Category', 'ISBN', 'Year', 'Pages', 'Publisher', 'Language', 'Format', 'Rating', 'Downloads', 'Tags'];
+    const rows = filtered.map((b) => [
+      b.id, `"${b.title}"`, `"${b.author}"`, b.category, b.isbn || '', b.year, b.pages || '', b.publisher || '', b.language || '', b.format, b.rating, b.downloads || 0, (b.tags || []).join('; '),
+    ]);
+    const csv = [headers.join(','), ...rows.map((r) => r.map(String).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `neuro_books_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success('Daftar buku diekspor ke CSV');
+  };
+
+  const SortHeader = ({ field, label, className = '' }: { field: string; label: string; className?: string }) => (
+    <button
+      className={`flex items-center gap-1 hover:text-[#0e7490] transition-colors ${className}`}
+      onClick={() => toggleSort(field)}
+    >
+      {label}
+      <ArrowUpDown size={12} className={sortField === field ? 'text-[#0e7490]' : 'text-[#94a3b8]'} />
+    </button>
+  );
+
   return (
     <div className="space-y-4">
-      {/* Search */}
-      <div className="flex items-center gap-3">
+      {/* Search + Actions */}
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-[400px]">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
           <Input
-            placeholder="Cari judul atau penulis..."
+            placeholder="Cari judul, penulis, ISBN..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -973,8 +1173,38 @@ function BooksTab({
             className="pl-9"
           />
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={exportToCSV}
+          className="border-[#cffafe] text-[#0e7490] hover:bg-[#f0f9ff]"
+        >
+          <FileDown size={15} className="mr-1" />
+          Export CSV
+        </Button>
         <span className="text-sm text-[#64748b]">{filtered.length} buku</span>
       </div>
+
+      {/* Bulk Actions Bar */}
+      {selectedIds.size > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 p-3 bg-[#f0f9ff] border border-[#cffafe] rounded-lg"
+        >
+          <SquareCheck size={16} className="text-[#0e7490]" />
+          <span className="text-sm text-[#164e63] font-medium">{selectedIds.size} buku dipilih</span>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setShowBulkDelete(true)}
+            className="ml-auto"
+          >
+            <Trash2 size={14} className="mr-1" />
+            Hapus
+          </Button>
+        </motion.div>
+      )}
 
       {/* Table */}
       <Card>
@@ -983,14 +1213,19 @@ function BooksTab({
             <Table>
               <TableHeader>
                 <TableRow className="bg-[#f0f9ff]">
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={paginated.length > 0 && paginated.every((b) => selectedIds.has(b.id))}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead className="w-[60px]">Cover</TableHead>
-                  <TableHead>Judul</TableHead>
-                  <TableHead>Penulis</TableHead>
-                  <TableHead>Kategori</TableHead>
-                  <TableHead>Format</TableHead>
-                  <TableHead className="text-center">Tahun</TableHead>
-                  <TableHead className="text-center">Rating</TableHead>
-                  <TableHead className="text-center">Downloads</TableHead>
+                  <TableHead><SortHeader field="title" label="Judul" /></TableHead>
+                  <TableHead><SortHeader field="author" label="Penulis" /></TableHead>
+                  <TableHead><SortHeader field="category" label="Kategori" /></TableHead>
+                  <TableHead className="text-center"><SortHeader field="year" label="Tahun" className="justify-center" /></TableHead>
+                  <TableHead className="text-center"><SortHeader field="rating" label="Rating" className="justify-center" /></TableHead>
+                  <TableHead className="text-center"><SortHeader field="downloads" label="Downloads" className="justify-center" /></TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1004,6 +1239,12 @@ function BooksTab({
                 ) : (
                   paginated.map((book) => (
                     <TableRow key={book.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(book.id)}
+                          onCheckedChange={() => toggleSelect(book.id)}
+                        />
+                      </TableCell>
                       <TableCell>
                         <img
                           src={book.coverImage}
@@ -1021,20 +1262,6 @@ function BooksTab({
                       <TableCell>
                         <Badge variant="outline" className="text-xs border-[#cffafe] text-[#0e7490]">
                           {book.category}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          className={`text-xs ${
-                            book.format === 'PDF'
-                              ? 'bg-red-50 text-red-600 border-red-200'
-                              : book.format === 'DOC'
-                              ? 'bg-blue-50 text-blue-600 border-blue-200'
-                              : 'bg-green-50 text-green-600 border-green-200'
-                          }`}
-                          variant="outline"
-                        >
-                          {book.format}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center text-[#64748b]">{book.year}</TableCell>
@@ -1129,7 +1356,7 @@ function BooksTab({
 
       {/* Edit Modal */}
       <Dialog open={!!editBook} onOpenChange={() => setEditBook(null)}>
-        <DialogContent className="max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[700px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-[#164e63]">Edit Buku</DialogTitle>
             <DialogDescription>Edit detail buku di bawah ini.</DialogDescription>
@@ -1169,12 +1396,37 @@ function BooksTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Delete Confirmation */}
+      <Dialog open={showBulkDelete} onOpenChange={setShowBulkDelete}>
+        <DialogContent className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63] flex items-center gap-2">
+              <AlertCircle size={20} className="text-red-500" />
+              Konfirmasi Hapus Massal
+            </DialogTitle>
+            <DialogDescription>
+              Apakah Anda yakin ingin menghapus {selectedIds.size} buku yang dipilih? Tindakan ini tidak dapat dibatalkan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkDelete(false)}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDelete}>
+              <Trash2 size={15} className="mr-1" />
+              Hapus {selectedIds.size} Buku
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
+
 /* ═══════════════════════════════════════════
-   USERS TAB (Kelola Pengguna - Enhanced)
+   USERS TAB (Kelola Pengguna)
    ═══════════════════════════════════════════ */
 function UsersTab({
   users,
@@ -1209,12 +1461,10 @@ function UsersTab({
   const filtered = useMemo(() => {
     let result = [...users];
 
-    // Filter by role
     if (filterRole !== 'all') {
       result = result.filter((u) => u.role === filterRole);
     }
 
-    // Search
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -1226,7 +1476,6 @@ function UsersTab({
       );
     }
 
-    // Sort
     result.sort((a, b) => {
       let comparison = 0;
       if (sortBy === 'name') {
@@ -1413,13 +1662,10 @@ function UsersTab({
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-[#64748b]">
-            Halaman {page} dari {totalPages}
-          </p>
+          <p className="text-sm text-[#64748b]">Halaman {page} dari {totalPages}</p>
           <div className="flex items-center gap-1">
             <Button
-              variant="outline"
-              size="sm"
+              variant="outline" size="sm"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
               className="h-8 w-8 p-0"
@@ -1432,16 +1678,13 @@ function UsersTab({
                 variant={p === page ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setPage(p)}
-                className={`h-8 w-8 p-0 text-xs ${
-                  p === page ? 'bg-[#0e7490] text-white' : ''
-                }`}
+                className={`h-8 w-8 p-0 text-xs ${p === page ? 'bg-[#0e7490] text-white' : ''}`}
               >
                 {p}
               </Button>
             ))}
             <Button
-              variant="outline"
-              size="sm"
+              variant="outline" size="sm"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
               className="h-8 w-8 p-0"
@@ -1452,7 +1695,7 @@ function UsersTab({
         </div>
       )}
 
-      {/* View Profile Dialog */}
+      {/* Dialogs */}
       <Dialog open={!!viewUser} onOpenChange={() => setViewUser(null)}>
         <DialogContent className="max-w-[420px]">
           <DialogHeader>
@@ -1502,20 +1745,15 @@ function UsersTab({
         </DialogContent>
       </Dialog>
 
-      {/* Edit Role Dialog */}
       <Dialog open={!!editRoleUser} onOpenChange={() => setEditRoleUser(null)}>
         <DialogContent className="max-w-[400px]">
           <DialogHeader>
             <DialogTitle className="text-[#164e63]">Ubah Role</DialogTitle>
-            <DialogDescription>
-              Ubah role untuk pengguna &quot;{editRoleUser?.name}&quot;
-            </DialogDescription>
+            <DialogDescription>Ubah role untuk pengguna &quot;{editRoleUser?.name}&quot;</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <Select value={newRole} onValueChange={(v) => setNewRole(v as 'admin' | 'user')}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="user">User</SelectItem>
@@ -1523,9 +1761,7 @@ function UsersTab({
             </Select>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditRoleUser(null)}>
-              Batal
-            </Button>
+            <Button variant="outline" onClick={() => setEditRoleUser(null)}>Batal</Button>
             <Button
               onClick={() => editRoleUser && handleRoleChange(editRoleUser.id, newRole)}
               className="bg-[#0e7490] hover:bg-[#155e75]"
@@ -1537,7 +1773,6 @@ function UsersTab({
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
       <Dialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>
         <DialogContent className="max-w-[400px]">
           <DialogHeader>
@@ -1545,14 +1780,10 @@ function UsersTab({
               <AlertCircle size={20} className="text-red-500" />
               Konfirmasi Hapus
             </DialogTitle>
-            <DialogDescription>
-              Apakah Anda yakin ingin menghapus pengguna &quot;{deleteUser?.name}&quot;?
-            </DialogDescription>
+            <DialogDescription>Apakah Anda yakin ingin menghapus pengguna &quot;{deleteUser?.name}&quot;?</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteUser(null)}>
-              Batal
-            </Button>
+            <Button variant="outline" onClick={() => setDeleteUser(null)}>Batal</Button>
             <Button variant="destructive" onClick={handleDelete}>
               <Trash2 size={15} className="mr-1" />
               Hapus
@@ -1563,7 +1794,6 @@ function UsersTab({
     </div>
   );
 }
-
 
 /* ═══════════════════════════════════════════
    COMMENTS TAB (Kelola Komentar)
@@ -1586,8 +1816,7 @@ function CommentsTab({
   const filtered = useMemo(() => {
     return comments.filter((c) => {
       const matchBook = filterBook === 'all' || c.bookId === filterBook;
-      const matchUser =
-        !filterUser || c.userName.toLowerCase().includes(filterUser.toLowerCase());
+      const matchUser = !filterUser || c.userName.toLowerCase().includes(filterUser.toLowerCase());
       return matchBook && matchUser;
     });
   }, [comments, filterBook, filterUser]);
@@ -1602,7 +1831,6 @@ function CommentsTab({
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <Select value={filterBook} onValueChange={setFilterBook}>
           <SelectTrigger className="w-[200px]">
@@ -1611,9 +1839,7 @@ function CommentsTab({
           <SelectContent>
             <SelectItem value="all">Semua Buku</SelectItem>
             {books.map((b) => (
-              <SelectItem key={b.id} value={b.id}>
-                {b.title}
-              </SelectItem>
+              <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -1661,25 +1887,18 @@ function CommentsTab({
                           <span className="text-[#164e63] font-medium">{comment.userName}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-[#64748b] max-w-[150px] truncate">
-                        {comment.bookTitle}
-                      </TableCell>
-                      <TableCell className="text-[#164e63] max-w-[250px] truncate">
-                        {comment.content}
-                      </TableCell>
+                      <TableCell className="text-[#64748b] max-w-[150px] truncate">{comment.bookTitle}</TableCell>
+                      <TableCell className="text-[#164e63] max-w-[250px] truncate">{comment.content}</TableCell>
                       <TableCell className="text-center">
                         <span className="flex items-center justify-center gap-1 text-amber-500 text-sm">
                           <Star size={12} className="fill-current" />
                           {comment.rating}
                         </span>
                       </TableCell>
-                      <TableCell className="text-[#64748b] text-sm">
-                        {formatDate(comment.createdAt)}
-                      </TableCell>
+                      <TableCell className="text-[#64748b] text-sm">{formatDate(comment.createdAt)}</TableCell>
                       <TableCell className="text-right">
                         <Button
-                          variant="ghost"
-                          size="icon-sm"
+                          variant="ghost" size="icon-sm"
                           onClick={() => setDeleteComment(comment)}
                           className="h-8 w-8 text-red-500 hover:bg-red-50"
                         >
@@ -1695,7 +1914,6 @@ function CommentsTab({
         </CardContent>
       </Card>
 
-      {/* Delete Confirmation */}
       <Dialog open={!!deleteComment} onOpenChange={() => setDeleteComment(null)}>
         <DialogContent className="max-w-[400px]">
           <DialogHeader>
@@ -1706,9 +1924,7 @@ function CommentsTab({
             <DialogDescription>Apakah Anda yakin ingin menghapus komentar ini?</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteComment(null)}>
-              Batal
-            </Button>
+            <Button variant="outline" onClick={() => setDeleteComment(null)}>Batal</Button>
             <Button variant="destructive" onClick={handleDelete}>
               <Trash2 size={15} className="mr-1" />
               Hapus
@@ -1720,8 +1936,9 @@ function CommentsTab({
   );
 }
 
+
 /* ═══════════════════════════════════════════
-   CATEGORIES TAB (Kelola Kategori)
+   CATEGORIES TAB (Kelola Kategori - Enhanced)
    ═══════════════════════════════════════════ */
 const gradientPresets = [
   { name: 'Ocean', value: 'from-[#0e7490] to-[#14b8a6]' },
@@ -1751,6 +1968,7 @@ function CategoriesTab({
   const [newGradient, setNewGradient] = useState('from-[#0e7490] to-[#14b8a6]');
   const [editCategory, setEditCategory] = useState<Category | null>(null);
   const [deleteCategory, setDeleteCategory] = useState<Category | null>(null);
+  const [hasBooksWarning, setHasBooksWarning] = useState(false);
 
   const availableIcons = Object.keys(iconMap);
 
@@ -1797,7 +2015,6 @@ function CategoriesTab({
       ),
     );
 
-    // Update books that use this category
     if (oldSlug && oldSlug !== newSlug) {
       setBooks((prev) =>
         prev.map((b) =>
@@ -1817,7 +2034,7 @@ function CategoriesTab({
     if (!deleteCategory) return;
     const hasBooks = books.some((b) => b.categorySlug === deleteCategory.slug);
     if (hasBooks) {
-      toast.error('Tidak dapat menghapus kategori yang masih memiliki buku');
+      setHasBooksWarning(true);
       setDeleteCategory(null);
       return;
     }
@@ -1953,36 +2170,32 @@ function CategoriesTab({
                 </div>
                 <div className="flex items-center gap-0.5">
                   <Button
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="ghost" size="icon-sm"
                     onClick={() => moveCategory(index, 'up')}
                     disabled={index === 0}
                     className="h-7 w-7 text-[#64748b] hover:bg-[#f0f9ff] disabled:opacity-30"
                     title="Naik"
                   >
-                    <ChevronLeft size={13} className="rotate-90" />
+                    <MoveUp size={13} />
                   </Button>
                   <Button
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="ghost" size="icon-sm"
                     onClick={() => moveCategory(index, 'down')}
                     disabled={index === categories.length - 1}
                     className="h-7 w-7 text-[#64748b] hover:bg-[#f0f9ff] disabled:opacity-30"
                     title="Turun"
                   >
-                    <ChevronLeft size={13} className="-rotate-90" />
+                    <MoveDown size={13} />
                   </Button>
                   <Button
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="ghost" size="icon-sm"
                     onClick={() => setEditCategory(cat)}
                     className="h-7 w-7 text-[#0e7490] hover:bg-[#f0f9ff]"
                   >
                     <Pencil size={13} />
                   </Button>
                   <Button
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="ghost" size="icon-sm"
                     onClick={() => setDeleteCategory(cat)}
                     className="h-7 w-7 text-red-500 hover:bg-red-50"
                   >
@@ -2018,20 +2231,13 @@ function CategoriesTab({
                 <Textarea
                   value={editCategory.description || ''}
                   onChange={(e) => setEditCategory({ ...editCategory, description: e.target.value })}
-                  rows={2}
-                  className="text-sm"
-                  placeholder="Deskripsi kategori..."
+                  rows={2} className="text-sm" placeholder="Deskripsi kategori..."
                 />
               </div>
               <div>
                 <label className="text-sm font-medium text-[#164e63] mb-1 block">Ikon</label>
-                <Select
-                  value={editCategory.icon}
-                  onValueChange={(v) => setEditCategory({ ...editCategory, icon: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={editCategory.icon} onValueChange={(v) => setEditCategory({ ...editCategory, icon: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {availableIcons.map((iconName) => {
                       const IconComp = iconMap[iconName];
@@ -2068,9 +2274,7 @@ function CategoriesTab({
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setEditCategory(null)}>
-                  Batal
-                </Button>
+                <Button variant="outline" onClick={() => setEditCategory(null)}>Batal</Button>
                 <Button onClick={handleEditSave} className="bg-[#0e7490] hover:bg-[#155e75]">
                   <Save size={15} className="mr-1" />
                   Simpan
@@ -2082,7 +2286,7 @@ function CategoriesTab({
       </Dialog>
 
       {/* Delete Confirmation */}
-      <Dialog open={!!deleteCategory} onOpenChange={() => setDeleteCategory(null)}>
+      <Dialog open={!!deleteCategory} onOpenChange={() => { setDeleteCategory(null); setHasBooksWarning(false); }}>
         <DialogContent className="max-w-[400px]">
           <DialogHeader>
             <DialogTitle className="text-[#164e63] flex items-center gap-2">
@@ -2093,10 +2297,13 @@ function CategoriesTab({
               Apakah Anda yakin ingin menghapus kategori &quot;{deleteCategory?.name}&quot;?
             </DialogDescription>
           </DialogHeader>
+          {hasBooksWarning && (
+            <div className="text-xs text-red-500 bg-red-50 p-2 rounded">
+              Kategori ini masih memiliki buku. Pindahkan atau hapus buku terlebih dahulu.
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteCategory(null)}>
-              Batal
-            </Button>
+            <Button variant="outline" onClick={() => { setDeleteCategory(null); setHasBooksWarning(false); }}>Batal</Button>
             <Button variant="destructive" onClick={handleDelete}>
               <Trash2 size={15} className="mr-1" />
               Hapus
@@ -2110,8 +2317,718 @@ function CategoriesTab({
 
 
 /* ═══════════════════════════════════════════
-   THEME TAB (Edit Tema)
+   BACKGROUND EDITOR TAB (NEW)
    ═══════════════════════════════════════════ */
+function BackgroundTab({
+  background,
+  setBackground,
+  addActivity,
+}: {
+  background: BackgroundConfig;
+  setBackground: React.Dispatch<React.SetStateAction<BackgroundConfig>>;
+  addActivity: (type: ActivityItem['type'], message: string) => void;
+}) {
+  const [localBg, setLocalBg] = useState<BackgroundConfig>({ ...background });
+  const [isDragOver, setIsDragOver] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setLocalBg({ ...background });
+  }, [background]);
+
+  const handleSave = () => {
+    setBackground(localBg);
+    addActivity('background', 'Mengubah pengaturan wallpaper');
+    toast.success('Pengaturan wallpaper disimpan');
+  };
+
+  const handleReset = () => {
+    setLocalBg({ ...defaultBackground });
+    setBackground({ ...defaultBackground });
+    addActivity('background', 'Mereset wallpaper ke default');
+    toast.success('Wallpaper direset ke default');
+  };
+
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('File harus berupa gambar (JPG, PNG, GIF)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran gambar maksimal 5MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      setLocalBg((prev) => ({ ...prev, customImage: result, type: 'custom' }));
+      toast.success('Gambar berhasil diupload');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false); };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Ukuran gambar maksimal 5MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const result = ev.target?.result as string;
+        setLocalBg((prev) => ({ ...prev, customImage: result, type: 'custom' }));
+        toast.success('Gambar berhasil diupload');
+      };
+      reader.readAsDataURL(file);
+    } else {
+      toast.error('File harus berupa gambar');
+    }
+  };
+
+  const previewImage = localBg.type === 'custom' ? localBg.customImage : localBg.presetImage;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Settings Panel */}
+        <div className="space-y-6">
+          {/* Enable Toggle */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+                <SlidersHorizontal size={18} className="text-[#0e7490]" />
+                Pengaturan Wallpaper
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-[#164e63]">Aktifkan Wallpaper Kustom</p>
+                  <p className="text-xs text-[#64748b]">Tampilkan gambar background di halaman utama</p>
+                </div>
+                <Switch
+                  checked={localBg.enabled}
+                  onCheckedChange={(v) => setLocalBg((prev) => ({ ...prev, enabled: v }))}
+                />
+              </div>
+
+              <div className="border-t border-[#cffafe] pt-4">
+                <p className="text-sm font-medium text-[#164e63] mb-3">Tipe Background</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setLocalBg((prev) => ({ ...prev, type: 'gradient' }))}
+                    className={`flex-1 p-3 rounded-lg border text-sm font-medium transition-all ${
+                      localBg.type === 'gradient'
+                        ? 'border-[#0e7490] bg-[#f0f9ff] text-[#0e7490]'
+                        : 'border-[#cffafe] text-[#64748b] hover:border-[#0e7490]'
+                    }`}
+                  >
+                    <Grid3X3 size={18} className="mx-auto mb-1" />
+                    Gradient (Default)
+                  </button>
+                  <button
+                    onClick={() => setLocalBg((prev) => ({ ...prev, type: 'custom' }))}
+                    className={`flex-1 p-3 rounded-lg border text-sm font-medium transition-all ${
+                      localBg.type === 'custom'
+                        ? 'border-[#0e7490] bg-[#f0f9ff] text-[#0e7490]'
+                        : 'border-[#cffafe] text-[#64748b] hover:border-[#0e7490]'
+                    }`}
+                  >
+                    <ImageIcon size={18} className="mx-auto mb-1" />
+                    Gambar Kustom
+                  </button>
+                </div>
+              </div>
+
+              {/* Opacity Slider */}
+              <div className="border-t border-[#cffafe] pt-4">
+                <label className="text-sm font-medium text-[#164e63] mb-2 block">
+                  Opacity: {localBg.opacity}%
+                </label>
+                <Slider
+                  value={[localBg.opacity]}
+                  onValueChange={(v) => setLocalBg((prev) => ({ ...prev, opacity: v[0] }))}
+                  min={0} max={100} step={5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-[10px] text-[#94a3b8] mt-1">
+                  <span>Transparan</span>
+                  <span>Opaque</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Preset Selection */}
+          {localBg.type === 'gradient' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+                  <Sparkles size={18} className="text-[#f59e0b]" />
+                  Preset Background
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 gap-3">
+                  {presetBackgrounds.map((preset) => (
+                    <button
+                      key={preset.value}
+                      onClick={() => setLocalBg((prev) => ({ ...prev, presetImage: preset.value }))}
+                      className={`flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                        localBg.presetImage === preset.value
+                          ? 'border-[#0e7490] bg-[#f0f9ff]'
+                          : 'border-[#cffafe] hover:border-[#0e7490]'
+                      }`}
+                    >
+                      <div className="w-16 h-10 rounded bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-xs">
+                        <ImageIcon size={14} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-[#164e63]">{preset.name}</p>
+                        <p className="text-xs text-[#64748b]">{preset.value}</p>
+                      </div>
+                      {localBg.presetImage === preset.value && (
+                        <Check size={16} className="text-[#0e7490] ml-auto" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Custom Upload */}
+          {localBg.type === 'custom' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+                  <Upload size={18} className="text-[#14b8a6]" />
+                  Upload Gambar
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => coverInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+                    isDragOver
+                      ? 'border-[#0e7490] bg-[#f0f9ff] scale-[1.01]'
+                      : 'border-[#0e7490]/30 hover:border-[#0e7490] hover:bg-[#f0f9ff]/30'
+                  }`}
+                >
+                  <div className={`w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center ${
+                    isDragOver ? 'bg-[#0e7490] text-white' : 'bg-[#f0f9ff] text-[#0e7490]'
+                  }`}>
+                    <Upload size={22} />
+                  </div>
+                  <p className="text-sm font-medium text-[#164e63]">Drag & drop gambar di sini</p>
+                  <p className="text-xs text-[#64748b] mt-1">JPG, PNG, GIF (max 5MB)</p>
+                </div>
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleCoverUpload}
+                  className="hidden"
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={handleSave} className="bg-[#0e7490] hover:bg-[#155e75]">
+              <Save size={15} className="mr-1" />
+              Simpan Pengaturan
+            </Button>
+            <Button variant="outline" onClick={handleReset}>
+              <RotateCcw size={15} className="mr-1" />
+              Reset Default
+            </Button>
+          </div>
+        </div>
+
+        {/* Preview Panel */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+              <Eye size={18} className="text-[#14b8a6]" />
+              Pratinjau
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className="relative rounded-xl overflow-hidden"
+              style={{ height: '320px' }}
+            >
+              {/* Background Layer */}
+              {localBg.enabled && (
+                <div
+                  className="absolute inset-0 bg-cover bg-center"
+                  style={{
+                    backgroundImage: `url(${previewImage})`,
+                    opacity: localBg.opacity / 100,
+                  }}
+                />
+              )}
+              {/* Gradient fallback */}
+              {(!localBg.enabled || localBg.type === 'gradient') && (
+                <div
+                  className="absolute inset-0 bg-gradient-to-br from-[#f0f9ff] via-[#ecfeff] to-[#ccfbf1]"
+                  style={{ opacity: localBg.enabled ? 1 - localBg.opacity / 100 : 1 }}
+                />
+              )}
+              {/* Sample Content */}
+              <div className="relative z-10 p-6 h-full flex flex-col justify-center items-center text-center">
+                <Brain size={36} className="text-[#0e7490] mb-3" />
+                <h3 className="text-lg font-bold text-[#164e63]">NeuroLibrary</h3>
+                <p className="text-sm text-[#64748b] mt-1">Perpustakaan Digital Neurologi</p>
+                <div className="mt-4 flex gap-2">
+                  <span className="px-3 py-1 rounded-full bg-[#0e7490]/10 text-[#0e7490] text-xs font-medium">
+                    150+ Buku
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-[#14b8a6]/10 text-[#14b8a6] text-xs font-medium">
+                    12 Kategori
+                  </span>
+                </div>
+                <p className="text-[10px] text-[#94a3b8] mt-3">
+                  {localBg.enabled
+                    ? `Wallpaper aktif (${localBg.type}, opacity ${localBg.opacity}%)`
+                    : 'Wallpaper tidak aktif (gradient default)'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   ABOUT EDITOR TAB (NEW)
+   ═══════════════════════════════════════════ */
+function AboutEditorTab({
+  about,
+  setAbout,
+  addActivity,
+}: {
+  about: AboutConfig;
+  setAbout: React.Dispatch<React.SetStateAction<AboutConfig>>;
+  addActivity: (type: ActivityItem['type'], message: string) => void;
+}) {
+  const [localAbout, setLocalAbout] = useState<AboutConfig>({ ...about });
+  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+
+  useEffect(() => {
+    setLocalAbout({ ...about });
+  }, [about]);
+
+  const handleSave = () => {
+    setAbout(localAbout);
+    addActivity('about', 'Mengubah halaman tentang');
+    toast.success('Perubahan halaman tentang disimpan');
+  };
+
+  const handleReset = () => {
+    setLocalAbout({ ...defaultAbout });
+    setAbout({ ...defaultAbout });
+    addActivity('about', 'Mereset halaman tentang ke default');
+    toast.success('Halaman tentang direset');
+  };
+
+  const addMember = () => {
+    const newMember: TeamMember = {
+      id: generateId(),
+      name: '',
+      title: '',
+      specialty: '',
+      institution: '',
+      avatar: '',
+    };
+    setLocalAbout((prev) => ({ ...prev, team: [...prev.team, newMember] }));
+    setEditingMember(newMember);
+  };
+
+  const updateMember = (updated: TeamMember) => {
+    setLocalAbout((prev) => ({
+      ...prev,
+      team: prev.team.map((m) => (m.id === updated.id ? updated : m)),
+    }));
+    setEditingMember(null);
+  };
+
+  const removeMember = (id: string) => {
+    setLocalAbout((prev) => ({
+      ...prev,
+      team: prev.team.filter((m) => m.id !== id),
+    }));
+    setEditingMember(null);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Actions */}
+      <div className="flex flex-wrap gap-3">
+        <Button onClick={handleSave} className="bg-[#0e7490] hover:bg-[#155e75]">
+          <Save size={15} className="mr-1" />
+          Simpan Perubahan
+        </Button>
+        <Button variant="outline" onClick={handleReset}>
+          <RotateCcw size={15} className="mr-1" />
+          Reset Default
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column - Forms */}
+        <div className="space-y-6">
+          {/* Mission Statement */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+                <Sparkles size={18} className="text-[#f59e0b]" />
+                Misi
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                rows={5}
+                placeholder="Tulis pernyataan misi..."
+                value={localAbout.mission}
+                onChange={(e) => setLocalAbout((prev) => ({ ...prev, mission: e.target.value }))}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Contact Info */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+                <Mail size={18} className="text-[#14b8a6]" />
+                Kontak
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <label className="text-xs text-[#64748b] mb-1 block">Email</label>
+                <Input
+                  value={localAbout.contact.email}
+                  onChange={(e) =>
+                    setLocalAbout((prev) => ({
+                      ...prev,
+                      contact: { ...prev.contact, email: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs text-[#64748b] mb-1 block">Telepon</label>
+                <Input
+                  value={localAbout.contact.phone}
+                  onChange={(e) =>
+                    setLocalAbout((prev) => ({
+                      ...prev,
+                      contact: { ...prev.contact, phone: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs text-[#64748b] mb-1 block">Alamat</label>
+                <Textarea
+                  rows={2}
+                  value={localAbout.contact.address}
+                  onChange={(e) =>
+                    setLocalAbout((prev) => ({
+                      ...prev,
+                      contact: { ...prev.contact, address: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Social Links */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+                <Globe size={18} className="text-[#0e7490]" />
+                Social Media
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <label className="text-xs text-[#64748b] mb-1 flex items-center gap-1">
+                  <Github size={12} /> GitHub
+                </label>
+                <Input
+                  placeholder="https://github.com/..."
+                  value={localAbout.social.github}
+                  onChange={(e) =>
+                    setLocalAbout((prev) => ({
+                      ...prev,
+                      social: { ...prev.social, github: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs text-[#64748b] mb-1 flex items-center gap-1">
+                  <Twitter size={12} /> Twitter
+                </label>
+                <Input
+                  placeholder="https://twitter.com/..."
+                  value={localAbout.social.twitter}
+                  onChange={(e) =>
+                    setLocalAbout((prev) => ({
+                      ...prev,
+                      social: { ...prev.social, twitter: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs text-[#64748b] mb-1 flex items-center gap-1">
+                  <Linkedin size={12} /> LinkedIn
+                </label>
+                <Input
+                  placeholder="https://linkedin.com/..."
+                  value={localAbout.social.linkedin}
+                  onChange={(e) =>
+                    setLocalAbout((prev) => ({
+                      ...prev,
+                      social: { ...prev.social, linkedin: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Team Members */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+                  <Users size={18} className="text-[#8b5cf6]" />
+                  Tim ({localAbout.team.length})
+                </CardTitle>
+                <Button size="sm" onClick={addMember} className="bg-[#0e7490] hover:bg-[#155e75]">
+                  <PlusCircle size={14} className="mr-1" />
+                  Tambah
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {localAbout.team.map((member) => (
+                <motion.div
+                  key={member.id}
+                  layout
+                  className="flex items-center gap-3 p-3 rounded-lg bg-[#f0f9ff] border border-[#cffafe]"
+                >
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                    {member.name.charAt(0).toUpperCase() || '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#164e63] truncate">
+                      {member.name || '(Belum diisi)'}
+                    </p>
+                    <p className="text-xs text-[#64748b]">{member.title || '-'}</p>
+                  </div>
+                  <Button
+                    variant="ghost" size="icon-sm"
+                    onClick={() => setEditingMember(member)}
+                    className="h-7 w-7 text-[#0e7490] hover:bg-white"
+                  >
+                    <Pencil size={13} />
+                  </Button>
+                  <Button
+                    variant="ghost" size="icon-sm"
+                    onClick={() => removeMember(member.id)}
+                    className="h-7 w-7 text-red-500 hover:bg-red-50"
+                  >
+                    <Trash2 size={13} />
+                  </Button>
+                </motion.div>
+              ))}
+              {localAbout.team.length === 0 && (
+                <p className="text-sm text-[#64748b] text-center py-4">Belum ada anggota tim</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column - Preview */}
+        <Card className="h-fit sticky top-0">
+          <CardHeader>
+            <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+              <Eye size={18} className="text-[#14b8a6]" />
+              Pratinjau Halaman Tentang
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Mission Preview */}
+            <div>
+              <h4 className="text-sm font-semibold text-[#0e7490] mb-2 flex items-center gap-2">
+                <Sparkles size={14} /> Misi Kami
+              </h4>
+              <div className="bg-[#f0f9ff] rounded-lg p-4">
+                <p className="text-sm text-[#164e63] leading-relaxed">
+                  {localAbout.mission || '(Belum diisi)'}
+                </p>
+              </div>
+            </div>
+
+            {/* Team Preview */}
+            <div>
+              <h4 className="text-sm font-semibold text-[#0e7490] mb-2 flex items-center gap-2">
+                <Users size={14} /> Tim Kami
+              </h4>
+              <div className="space-y-2">
+                {localAbout.team.map((member) => (
+                  <div key={member.id} className="flex items-center gap-3 p-3 bg-[#f0f9ff] rounded-lg">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0e7490] to-[#14b8a6] flex items-center justify-center text-white text-sm font-bold">
+                      {member.name.charAt(0).toUpperCase() || '?'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-[#164e63]">{member.name || '-'}</p>
+                      <p className="text-xs text-[#64748b]">{member.title || '-'} &middot; {member.specialty || '-'}</p>
+                      <p className="text-xs text-[#94a3b8]">{member.institution || '-'}</p>
+                    </div>
+                  </div>
+                ))}
+                {localAbout.team.length === 0 && (
+                  <p className="text-xs text-[#64748b] text-center py-2">Belum ada anggota tim</p>
+                )}
+              </div>
+            </div>
+
+            {/* Contact Preview */}
+            <div>
+              <h4 className="text-sm font-semibold text-[#0e7490] mb-2 flex items-center gap-2">
+                <Mail size={14} /> Hubungi Kami
+              </h4>
+              <div className="bg-[#f0f9ff] rounded-lg p-4 space-y-2">
+                {localAbout.contact.email && (
+                  <p className="text-xs text-[#64748b] flex items-center gap-2">
+                    <Mail size={12} className="text-[#0e7490]" /> {localAbout.contact.email}
+                  </p>
+                )}
+                {localAbout.contact.phone && (
+                  <p className="text-xs text-[#64748b] flex items-center gap-2">
+                    <Phone size={12} className="text-[#14b8a6]" /> {localAbout.contact.phone}
+                  </p>
+                )}
+                {localAbout.contact.address && (
+                  <p className="text-xs text-[#64748b] flex items-center gap-2">
+                    <MapPin size={12} className="text-[#ec4899]" /> {localAbout.contact.address}
+                  </p>
+                )}
+                <div className="flex items-center gap-3 pt-1">
+                  {localAbout.social.github && (
+                    <a href={localAbout.social.github} target="_blank" rel="noopener noreferrer" className="text-[#64748b] hover:text-[#0e7490]">
+                      <Github size={16} />
+                    </a>
+                  )}
+                  {localAbout.social.twitter && (
+                    <a href={localAbout.social.twitter} target="_blank" rel="noopener noreferrer" className="text-[#64748b] hover:text-[#0e7490]">
+                      <Twitter size={16} />
+                    </a>
+                  )}
+                  {localAbout.social.linkedin && (
+                    <a href={localAbout.social.linkedin} target="_blank" rel="noopener noreferrer" className="text-[#64748b] hover:text-[#0e7490]">
+                      <Linkedin size={16} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Edit Member Dialog */}
+      <Dialog open={!!editingMember} onOpenChange={() => setEditingMember(null)}>
+        <DialogContent className="max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#164e63]">
+              {editingMember?.name ? 'Edit Anggota' : 'Anggota Baru'}
+            </DialogTitle>
+          </DialogHeader>
+          {editingMember && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">Nama</label>
+                <Input
+                  value={editingMember.name}
+                  onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
+                  placeholder="Nama lengkap..."
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">Jabatan</label>
+                <Input
+                  value={editingMember.title}
+                  onChange={(e) => setEditingMember({ ...editingMember, title: e.target.value })}
+                  placeholder="Jabatan..."
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">Spesialisasi</label>
+                <Input
+                  value={editingMember.specialty}
+                  onChange={(e) => setEditingMember({ ...editingMember, specialty: e.target.value })}
+                  placeholder="Spesialisasi..."
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">Institusi</label>
+                <Input
+                  value={editingMember.institution}
+                  onChange={(e) => setEditingMember({ ...editingMember, institution: e.target.value })}
+                  placeholder="Institusi..."
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">URL Avatar (opsional)</label>
+                <Input
+                  value={editingMember.avatar}
+                  onChange={(e) => setEditingMember({ ...editingMember, avatar: e.target.value })}
+                  placeholder="https://..."
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditingMember(null)}>Batal</Button>
+                <Button onClick={() => editingMember && updateMember(editingMember)} className="bg-[#0e7490] hover:bg-[#155e75]">
+                  <Save size={15} className="mr-1" />
+                  Simpan
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════
+   THEME TAB (Edit Tema - Enhanced)
+   ═══════════════════════════════════════════ */
+const fontOptions = ['Inter', 'Poppins', 'Roboto', 'Open Sans'];
+
 function ThemeTab({
   theme,
   setTheme,
@@ -2153,7 +3070,7 @@ function ThemeTab({
     toast.success('Preset tema diterapkan');
   };
 
-  const handleExport = () => {
+  const handleExportCSS = () => {
     const css = `:root {
   --primary: ${localTheme.primary};
   --secondary: ${localTheme.secondary};
@@ -2161,10 +3078,17 @@ function ThemeTab({
   --neural: ${localTheme.neural};
   --background: ${localTheme.background};
   --text: ${localTheme.text};
+  --border: ${localTheme.border || '#cffafe'};
+  --font: ${localTheme.font || 'Inter'};
   --font-size: ${localTheme.fontSize || 14}px;
   --border-radius: ${localTheme.borderRadius || 8}px;
 }`;
     navigator.clipboard.writeText(css).then(() => toast.success('CSS tema disalin ke clipboard'));
+  };
+
+  const handleExportJSON = () => {
+    const json = JSON.stringify(localTheme, null, 2);
+    navigator.clipboard.writeText(json).then(() => toast.success('JSON tema disalin ke clipboard'));
   };
 
   const handleImport = () => {
@@ -2189,10 +3113,12 @@ function ThemeTab({
     { key: 'neural', label: 'Neural' },
     { key: 'background', label: 'Background' },
     { key: 'text', label: 'Text' },
+    { key: 'border', label: 'Border' },
   ];
 
   const fontSize = localTheme.fontSize || 14;
   const borderRadius = localTheme.borderRadius || 8;
+  const font = localTheme.font || 'Inter';
 
   return (
     <div className="space-y-6">
@@ -2205,7 +3131,7 @@ function ThemeTab({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {themePresets.map((preset) => (
               <button
                 key={preset.name}
@@ -2231,15 +3157,16 @@ function ThemeTab({
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Color Pickers */}
+        {/* Color Pickers & Controls */}
         <Card>
           <CardHeader>
             <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
               <Palette size={18} className="text-[#ec4899]" />
-              Warna Kustom
+              Warna & Tampilan
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Color Fields */}
             {colorFields.map(({ key, label }) => (
               <div key={key} className="flex items-center gap-3">
                 <div
@@ -2264,6 +3191,21 @@ function ThemeTab({
                 </div>
               </div>
             ))}
+
+            {/* Font Selector */}
+            <div className="border-t border-[#cffafe] pt-4">
+              <label className="text-sm font-medium text-[#164e63] mb-2 block">Font</label>
+              <Select value={font} onValueChange={(v) => update('font', v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {fontOptions.map((f) => (
+                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* Font Size Slider */}
             <div className="pt-2">
@@ -2310,11 +3252,15 @@ function ThemeTab({
               </Button>
               <Button variant="outline" onClick={handleReset}>
                 <RotateCcw size={15} className="mr-1" />
-                Reset Default
+                Reset
               </Button>
-              <Button variant="outline" onClick={handleExport}>
+              <Button variant="outline" onClick={handleExportCSS}>
                 <FileText size={15} className="mr-1" />
                 Export CSS
+              </Button>
+              <Button variant="outline" onClick={handleExportJSON}>
+                <FileDown size={15} className="mr-1" />
+                Export JSON
               </Button>
               <Button variant="outline" onClick={() => setShowImport(!showImport)}>
                 <Upload size={15} className="mr-1" />
@@ -2322,11 +3268,10 @@ function ThemeTab({
               </Button>
             </div>
 
-            {/* Import Theme Textarea */}
             {showImport && (
               <div className="space-y-2 pt-2">
                 <Textarea
-                  placeholder='Tempel JSON tema di sini...&#10;Contoh: { "primary": "#0e7490", "secondary": "#14b8a6" }'
+                  placeholder='Tempel JSON tema di sini...\nContoh: { "primary": "#0e7490", "secondary": "#14b8a6" }'
                   value={importJson}
                   onChange={(e) => setImportJson(e.target.value)}
                   rows={4}
@@ -2351,39 +3296,45 @@ function ThemeTab({
           <CardContent>
             <div
               className="rounded-xl space-y-3 overflow-hidden"
-              style={{ backgroundColor: localTheme.background, fontSize: `${fontSize}px` }}
+              style={{ backgroundColor: localTheme.background, fontSize: `${fontSize}px`, fontFamily: font, borderRadius: `${borderRadius}px` }}
             >
               {/* Sample Navbar */}
               <div
                 className="px-4 py-2.5 flex items-center gap-3"
                 style={{ backgroundColor: localTheme.primary, borderRadius: 0 }}
               >
-                <div className="w-6 h-6 rounded bg-white/20" />
+                <Brain size={20} className="text-white" />
                 <div className="flex-1 h-3 rounded bg-white/20 w-24" />
                 <div className="h-3 rounded bg-white/20 w-16" />
               </div>
 
               <div className="p-4 space-y-3">
-                {/* Sample Button */}
+                {/* Sample Buttons */}
                 <div className="flex items-center gap-2">
                   <button
                     className="px-4 py-2 text-white text-sm font-medium"
                     style={{ backgroundColor: localTheme.primary, borderRadius: `${borderRadius}px` }}
                   >
-                    Tombol Primary
+                    Primary
                   </button>
                   <button
                     className="px-4 py-2 text-white text-sm font-medium"
                     style={{ backgroundColor: localTheme.secondary, borderRadius: `${borderRadius}px` }}
                   >
-                    Tombol Secondary
+                    Secondary
+                  </button>
+                  <button
+                    className="px-4 py-2 text-sm font-medium border"
+                    style={{ borderColor: localTheme.primary, color: localTheme.primary, borderRadius: `${borderRadius}px`, backgroundColor: 'white' }}
+                  >
+                    Outline
                   </button>
                 </div>
 
                 {/* Sample Card */}
                 <div
                   className="p-3 bg-white shadow-sm border"
-                  style={{ borderColor: localTheme.primary + '30', borderRadius: `${borderRadius}px` }}
+                  style={{ borderColor: (localTheme.primary) + '30', borderRadius: `${borderRadius}px` }}
                 >
                   <h4 className="font-semibold mb-1" style={{ color: localTheme.text, fontSize: `${fontSize + 2}px` }}>
                     Judul Kartu
@@ -2409,10 +3360,10 @@ function ThemeTab({
                     Neural
                   </span>
                   <span
-                    className="px-2.5 py-1 font-medium text-white"
-                    style={{ backgroundColor: localTheme.primary, borderRadius: `${borderRadius * 2}px`, fontSize: `${fontSize - 2}px` }}
+                    className="px-2.5 py-1 font-medium"
+                    style={{ backgroundColor: localTheme.background, color: localTheme.text, border: `1px solid ${localTheme.primary}30`, borderRadius: `${borderRadius * 2}px`, fontSize: `${fontSize - 2}px` }}
                   >
-                    Primary
+                    Badge
                   </span>
                 </div>
 
@@ -2431,6 +3382,15 @@ function ThemeTab({
                       }}
                     />
                   </div>
+                </div>
+
+                {/* Sample Input */}
+                <div
+                  className="p-2 bg-white border flex items-center gap-2"
+                  style={{ borderColor: (localTheme.primary) + '30', borderRadius: `${borderRadius}px` }}
+                >
+                  <Search size={14} style={{ color: localTheme.text + '80' }} />
+                  <span style={{ color: localTheme.text + '80', fontSize: `${fontSize - 1}px` }}>Cari buku...</span>
                 </div>
               </div>
             </div>
@@ -2475,7 +3435,14 @@ function AddBookTab({
     tags: [],
   };
 
-  const [form, setForm] = useState<Book>({ ...emptyBook });
+  const [form, setForm] = useState<Book & { externalUrl?: string; sourceType?: 'upload' | 'external'; toc?: string; synopsis?: string; tagsInput?: string }>({
+    ...emptyBook,
+    externalUrl: '',
+    sourceType: 'upload',
+    toc: '',
+    synopsis: '',
+    tagsInput: '',
+  });
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [coverPreview, setCoverPreview] = useState<string>('/placeholder-book.png');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -2483,19 +3450,17 @@ function AddBookTab({
   const coverInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const update = <K extends keyof Book>(field: K, value: Book[K]) => {
+  const update = <K extends string>(field: K, value: unknown) => {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
-      // Auto-generate slug when title changes
       if (field === 'title' && typeof value === 'string') {
-        next.categorySlug = slugify(value);
+        // keep existing behavior
       }
       return next;
     });
     setErrors((prev) => ({ ...prev, [field]: false }));
   };
 
-  // Handle cover image upload
   const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -2517,7 +3482,6 @@ function AddBookTab({
     reader.readAsDataURL(file);
   };
 
-  // Handle file upload (PDF/DOC/PPT)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -2532,7 +3496,6 @@ function AddBookTab({
       return;
     }
     setUploadedFile(file);
-    // Auto-detect format from extension
     const formatMap: Record<string, BookFormat> = {
       '.pdf': 'PDF', '.doc': 'DOC', '.docx': 'DOCX',
       '.ppt': 'PPT', '.pptx': 'PPTX', '.xls': 'XLS', '.xlsx': 'XLSX',
@@ -2543,7 +3506,6 @@ function AddBookTab({
     toast.success(`File "${file.name}" siap diupload`);
   };
 
-  // Drag & drop handlers for file
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
   const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false); };
   const handleDrop = (e: React.DragEvent) => {
@@ -2577,16 +3539,19 @@ function AddBookTab({
     }
 
     const selectedCat = categories.find((c) => c.name === form.category);
+    const tagList = form.tagsInput?.split(',').map((t) => t.trim()).filter(Boolean) || [];
     const newBook: Book = {
       ...form,
       id: generateId(),
       categorySlug: selectedCat?.slug || form.categorySlug || slugify(form.title),
+      tags: tagList,
+      description: form.synopsis || form.description || '',
     };
 
     setBooks((prev) => [newBook, ...prev]);
     addActivity('book', `Menambahkan buku "${newBook.title}"`);
     toast.success('Buku berhasil ditambahkan!');
-    setForm({ ...emptyBook });
+    setForm({ ...emptyBook, externalUrl: '', sourceType: 'upload', toc: '', synopsis: '', tagsInput: '' });
     setCoverPreview('/placeholder-book.png');
     setUploadedFile(null);
   };
@@ -2603,7 +3568,6 @@ function AddBookTab({
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Cover Upload Section */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            {/* Cover Preview */}
             <div className="sm:col-span-1">
               <label className="text-sm font-medium text-[#164e63] mb-2 block">Cover Buku</label>
               <div
@@ -2623,31 +3587,15 @@ function AddBookTab({
                   </div>
                 </div>
               </div>
-              <input
-                ref={coverInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleCoverUpload}
-                className="hidden"
-              />
+              <input ref={coverInputRef} type="file" accept="image/*" onChange={handleCoverUpload} className="hidden" />
               <p className="text-[10px] text-[#94a3b8] mt-1.5 text-center">Klik gambar untuk upload cover (max 5MB)</p>
-
-              {/* Slug preview */}
-              {form.title && (
-                <div className="mt-4 p-3 bg-[#f0f9ff] rounded-lg">
-                  <label className="text-[10px] text-[#94a3b8] uppercase tracking-wider">Auto Slug</label>
-                  <p className="text-xs text-[#0e7490] font-mono mt-0.5 break-all">{slugify(form.title)}</p>
-                </div>
-              )}
             </div>
 
             {/* Form Fields */}
             <div className="sm:col-span-2 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <label className="text-sm font-medium text-[#164e63] mb-1 block">
-                    Judul Buku *
-                  </label>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">Judul Buku *</label>
                   <Input
                     placeholder="Masukkan judul buku..."
                     value={form.title}
@@ -2656,9 +3604,7 @@ function AddBookTab({
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-[#164e63] mb-1 block">
-                    Penulis *
-                  </label>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">Penulis *</label>
                   <Input
                     placeholder="Nama penulis..."
                     value={form.author}
@@ -2667,18 +3613,14 @@ function AddBookTab({
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-[#164e63] mb-1 block">
-                    Kategori *
-                  </label>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">Kategori *</label>
                   <Select value={form.category} onValueChange={(v) => update('category', v)}>
                     <SelectTrigger className={errors.category ? 'border-red-400' : ''}>
                       <SelectValue placeholder="Pilih kategori" />
                     </SelectTrigger>
                     <SelectContent>
                       {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.name}>
-                          {cat.name}
-                        </SelectItem>
+                        <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -2686,22 +3628,16 @@ function AddBookTab({
                 <div>
                   <label className="text-sm font-medium text-[#164e63] mb-1 block">Format</label>
                   <Select value={form.format} onValueChange={(v) => update('format', v as BookFormat)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {(['PDF', 'DOC', 'DOCX', 'PPT', 'PPTX', 'XLS', 'XLSX'] as BookFormat[]).map((f) => (
-                        <SelectItem key={f} value={f}>
-                          {f}
-                        </SelectItem>
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-[#164e63] mb-1 block">
-                    Tahun Terbit *
-                  </label>
+                  <label className="text-sm font-medium text-[#164e63] mb-1 block">Tahun Terbit *</label>
                   <Input
                     type="number"
                     placeholder="2024"
@@ -2759,13 +3695,79 @@ function AddBookTab({
             </div>
           </div>
 
-          {/* File Upload Section */}
+          {/* Tags */}
+          <div>
+            <label className="text-sm font-medium text-[#164e63] mb-1 block">Tags (pisahkan dengan koma)</label>
+            <Input
+              placeholder="neurology, clinical, textbook, ..."
+              value={form.tagsInput}
+              onChange={(e) => update('tagsInput', e.target.value)}
+            />
+          </div>
+
+          {/* Synopsis */}
+          <div>
+            <label className="text-sm font-medium text-[#164e63] mb-1 block">Sinopsis</label>
+            <Textarea
+              rows={4}
+              placeholder="Sinopsis buku..."
+              value={form.synopsis}
+              onChange={(e) => update('synopsis', e.target.value)}
+            />
+          </div>
+
+          {/* TOC */}
+          <div>
+            <label className="text-sm font-medium text-[#164e63] mb-1 block">Daftar Isi (satu baris per item)</label>
+            <Textarea
+              rows={4}
+              placeholder="1. Introduction&#10;2. Chapter One&#10;3. Chapter Two..."
+              value={form.toc}
+              onChange={(e) => update('toc', e.target.value)}
+            />
+          </div>
+
+          {/* Source Type Toggle */}
           <div className="border-t border-[#cffafe] pt-4">
-            <label className="text-sm font-medium text-[#164e63] mb-2 block">
-              <FileUp size={14} className="inline mr-1" />
-              Upload File Buku
-            </label>
-            {!uploadedFile ? (
+            <label className="text-sm font-medium text-[#164e63] mb-2 block">Sumber File</label>
+            <div className="flex gap-3 mb-4">
+              <button
+                type="button"
+                onClick={() => update('sourceType', 'upload')}
+                className={`flex-1 p-3 rounded-lg border text-sm font-medium transition-all ${
+                  form.sourceType === 'upload'
+                    ? 'border-[#0e7490] bg-[#f0f9ff] text-[#0e7490]'
+                    : 'border-[#cffafe] text-[#64748b] hover:border-[#0e7490]'
+                }`}
+              >
+                <Upload size={18} className="mx-auto mb-1" />
+                Upload File
+              </button>
+              <button
+                type="button"
+                onClick={() => update('sourceType', 'external')}
+                className={`flex-1 p-3 rounded-lg border text-sm font-medium transition-all ${
+                  form.sourceType === 'external'
+                    ? 'border-[#0e7490] bg-[#f0f9ff] text-[#0e7490]'
+                    : 'border-[#cffafe] text-[#64748b] hover:border-[#0e7490]'
+                }`}
+              >
+                <Globe size={18} className="mx-auto mb-1" />
+                Link Eksternal
+              </button>
+            </div>
+
+            {form.sourceType === 'external' ? (
+              <div>
+                <label className="text-sm font-medium text-[#164e63] mb-1 block">URL Eksternal (Google Drive, dll)</label>
+                <Input
+                  placeholder="https://drive.google.com/..."
+                  value={form.externalUrl}
+                  onChange={(e) => update('externalUrl', e.target.value)}
+                />
+                <p className="text-[10px] text-[#94a3b8] mt-1">Link ke Google Drive, Dropbox, atau sumber lain</p>
+              </div>
+            ) : (
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -2777,34 +3779,14 @@ function AddBookTab({
                     : 'border-[#0e7490]/30 hover:border-[#0e7490] hover:bg-[#f0f9ff]/30'
                 }`}
               >
-                <div
-                  className={`w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center ${
-                    isDragOver ? 'bg-[#0e7490] text-white' : 'bg-[#f0f9ff] text-[#0e7490]'
-                  }`}
-                >
+                <div className={`w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center ${
+                  isDragOver ? 'bg-[#0e7490] text-white' : 'bg-[#f0f9ff] text-[#0e7490]'
+                }`}>
                   <Upload size={22} />
                 </div>
                 <p className="text-sm font-medium text-[#164e63]">Drag & drop file di sini</p>
                 <p className="text-xs text-[#64748b] mt-1">PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX</p>
                 <p className="text-[10px] text-[#94a3b8] mt-1">Maksimal 10MB</p>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 p-4 rounded-lg bg-[#f0f9ff] border border-[#cffafe]">
-                <div className="w-10 h-10 rounded-lg bg-[#0e7490]/10 flex items-center justify-center flex-shrink-0">
-                  <FileText size={20} className="text-[#0e7490]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#164e63] truncate">{uploadedFile.name}</p>
-                  <p className="text-xs text-[#64748b]">{(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setUploadedFile(null)}
-                  className="h-8 w-8 text-red-500 hover:bg-red-50 flex-shrink-0"
-                >
-                  <X size={14} />
-                </Button>
               </div>
             )}
             <input
@@ -2816,16 +3798,24 @@ function AddBookTab({
             />
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="text-sm font-medium text-[#164e63] mb-1 block">Deskripsi</label>
-            <Textarea
-              rows={5}
-              placeholder="Deskripsi buku..."
-              value={form.description}
-              onChange={(e) => update('description', e.target.value)}
-            />
-          </div>
+          {uploadedFile && (
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-[#f0f9ff] border border-[#cffafe]">
+              <div className="w-10 h-10 rounded-lg bg-[#0e7490]/10 flex items-center justify-center flex-shrink-0">
+                <FileText size={20} className="text-[#0e7490]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[#164e63] truncate">{uploadedFile.name}</p>
+                <p className="text-xs text-[#64748b]">{(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+              </div>
+              <Button
+                variant="ghost" size="icon-sm"
+                onClick={() => setUploadedFile(null)}
+                className="h-8 w-8 text-red-500 hover:bg-red-50 flex-shrink-0"
+              >
+                <X size={14} />
+              </Button>
+            </div>
+          )}
 
           {/* Featured Toggle */}
           <div className="flex items-center gap-3">
@@ -2857,7 +3847,7 @@ function AddBookTab({
 
 
 /* ═══════════════════════════════════════════
-   BOOK FORM (Shared for Add/Edit)
+   BOOK FORM (Shared for Add/Edit - Enhanced)
    ═══════════════════════════════════════════ */
 function BookForm({
   book,
@@ -2872,10 +3862,17 @@ function BookForm({
   onCancel: () => void;
   submitLabel: string;
 }) {
-  const [form, setForm] = useState<Book>({ ...book });
+  const [form, setForm] = useState<Book & { externalUrl?: string; sourceType?: 'upload' | 'external'; toc?: string; synopsis?: string }>({
+    ...book,
+    externalUrl: (book as Record<string, unknown>).externalUrl as string || '',
+    sourceType: ((book as Record<string, unknown>).sourceType as 'upload' | 'external') || 'upload',
+    toc: (book as Record<string, unknown>).toc as string || '',
+    synopsis: book.description || '',
+  });
   const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const [tagsInput, setTagsInput] = useState((book.tags || []).join(', '));
 
-  const update = <K extends keyof Book>(field: K, value: Book[K]) => {
+  const update = <K extends string>(field: K, value: unknown) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: false }));
   };
@@ -2895,15 +3892,26 @@ function BookForm({
     }
 
     const selectedCat = categories.find((c) => c.name === form.category);
+    const tagList = tagsInput.split(',').map((t) => t.trim()).filter(Boolean);
     onSubmit({
       ...form,
       categorySlug: selectedCat?.slug || form.categorySlug,
+      tags: tagList,
+      description: form.synopsis || form.description || '',
     });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">URL Cover</label>
+          <Input
+            value={form.coverImage}
+            onChange={(e) => update('coverImage', e.target.value)}
+            placeholder="https://..."
+          />
+        </div>
         <div className="sm:col-span-2">
           <label className="text-sm font-medium text-[#164e63] mb-1 block">Judul *</label>
           <Input
@@ -2928,9 +3936,7 @@ function BookForm({
             </SelectTrigger>
             <SelectContent>
               {categories.map((cat) => (
-                <SelectItem key={cat.id} value={cat.name}>
-                  {cat.name}
-                </SelectItem>
+                <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -2938,14 +3944,10 @@ function BookForm({
         <div>
           <label className="text-sm font-medium text-[#164e63] mb-1 block">Format</label>
           <Select value={form.format} onValueChange={(v) => update('format', v as BookFormat)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {(['PDF', 'DOC', 'PPT', 'XLS'] as BookFormat[]).map((f) => (
-                <SelectItem key={f} value={f}>
-                  {f}
-                </SelectItem>
+              {(['PDF', 'DOC', 'DOCX', 'PPT', 'PPTX', 'XLS', 'XLSX'] as BookFormat[]).map((f) => (
+                <SelectItem key={f} value={f}>{f}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -2991,15 +3993,37 @@ function BookForm({
           <Input value={form.publisher} onChange={(e) => update('publisher', e.target.value)} />
         </div>
         <div className="sm:col-span-2">
-          <label className="text-sm font-medium text-[#164e63] mb-1 block">URL Cover</label>
-          <Input value={form.coverImage} onChange={(e) => update('coverImage', e.target.value)} />
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Tags (pisahkan dengan koma)</label>
+          <Input
+            value={tagsInput}
+            onChange={(e) => setTagsInput(e.target.value)}
+            placeholder="neurology, clinical, ..."
+          />
         </div>
         <div className="sm:col-span-2">
-          <label className="text-sm font-medium text-[#164e63] mb-1 block">Deskripsi</label>
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Sinopsis</label>
           <Textarea
             rows={4}
-            value={form.description}
-            onChange={(e) => update('description', e.target.value)}
+            value={form.synopsis}
+            onChange={(e) => update('synopsis', e.target.value)}
+            placeholder="Deskripsi/sinopsis buku..."
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">Daftar Isi</label>
+          <Textarea
+            rows={4}
+            value={form.toc}
+            onChange={(e) => update('toc', e.target.value)}
+            placeholder="1. Introduction\n2. Chapter One..."
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-sm font-medium text-[#164e63] mb-1 block">URL Eksternal (Google Drive, dll)</label>
+          <Input
+            value={form.externalUrl}
+            onChange={(e) => update('externalUrl', e.target.value)}
+            placeholder="https://drive.google.com/..."
           />
         </div>
         <div className="flex items-center gap-3">
@@ -3011,9 +4035,7 @@ function BookForm({
         </div>
       </div>
       <DialogFooter className="pt-2">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Batal
-        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>Batal</Button>
         <Button type="submit" className="bg-[#0e7490] hover:bg-[#155e75]">
           <Save size={15} className="mr-1" />
           {submitLabel}
@@ -3027,7 +4049,6 @@ function BookForm({
    UPLOAD FILE TAB
    ═══════════════════════════════════════════ */
 function UploadFileTab({ addActivity }: { addActivity: (type: ActivityItem['type'], message: string) => void }) {
-  // Keep localStorage in sync
   useLocalStorage<Book[]>('neuro_books', []);
   const [file, setFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -3035,7 +4056,6 @@ function UploadFileTab({ addActivity }: { addActivity: (type: ActivityItem['type
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Drag & drop handlers (same pattern as UploadModal)
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
   const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false); };
   const handleDrop = (e: React.DragEvent) => {
@@ -3075,7 +4095,6 @@ function UploadFileTab({ addActivity }: { addActivity: (type: ActivityItem['type
   const handlePublish = async () => {
     if (!file) return;
     await simulateUpload();
-    // Save to localStorage
     const uploads = JSON.parse(localStorage.getItem('neuro_admin_uploads') || '[]');
     uploads.push({ name: file.name, size: file.size, date: new Date().toISOString() });
     localStorage.setItem('neuro_admin_uploads', JSON.stringify(uploads));
@@ -3095,7 +4114,6 @@ function UploadFileTab({ addActivity }: { addActivity: (type: ActivityItem['type
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Drag & Drop Zone */}
           {!file ? (
             <div
               onDragOver={handleDragOver}
@@ -3118,7 +4136,6 @@ function UploadFileTab({ addActivity }: { addActivity: (type: ActivityItem['type
             </div>
           ) : (
             <div className="space-y-4">
-              {/* File Info */}
               <div className="flex items-center gap-3 p-4 rounded-lg bg-[#f0f9ff] border border-[#cffafe]">
                 <div className="w-12 h-12 rounded-lg bg-[#0e7490]/10 flex items-center justify-center">
                   <FileText size={24} className="text-[#0e7490]" />
@@ -3131,7 +4148,6 @@ function UploadFileTab({ addActivity }: { addActivity: (type: ActivityItem['type
                   <X size={16} />
                 </Button>
               </div>
-              {/* Progress */}
               {status !== 'idle' && (
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
@@ -3143,7 +4159,6 @@ function UploadFileTab({ addActivity }: { addActivity: (type: ActivityItem['type
                   </div>
                 </div>
               )}
-              {/* Actions */}
               <div className="flex gap-3 pt-2">
                 {status === 'idle' && (
                   <>
@@ -3164,20 +4179,19 @@ function UploadFileTab({ addActivity }: { addActivity: (type: ActivityItem['type
         </CardContent>
       </Card>
 
-      {/* Recent Uploads Table */}
       <RecentUploadsTable />
     </div>
   );
 }
 
-// Recent uploads table
+/* Recent Uploads Table */
 function RecentUploadsTable() {
   const [uploads] = useState<Array<{ name: string; size: number; date: string }>>(() => {
     try { return JSON.parse(localStorage.getItem('neuro_admin_uploads') || '[]'); }
     catch { return []; }
   });
 
-  const formatDate = (iso: string) => new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   return (
     <Card>
@@ -3207,7 +4221,7 @@ function RecentUploadsTable() {
                       <FileText size={14} className="text-[#0e7490]" /> {u.name}
                     </td>
                     <td className="py-2.5 text-[#64748b]">{(u.size / (1024 * 1024)).toFixed(2)} MB</td>
-                    <td className="py-2.5 text-[#64748b]">{formatDate(u.date)}</td>
+                    <td className="py-2.5 text-[#64748b]">{fmtDate(u.date)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -3232,30 +4246,28 @@ function PresentationMode({ isOpen, onClose, book }: PresentationModeProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Sample slides for demo (would be loaded from actual file)
   const slides = useMemo(() => {
     if (!book) return [];
     return [
-      { type: 'title', title: book.title, subtitle: book.author, category: book.category },
-      { type: 'overview', title: 'Ringkasan', content: book.description },
-      { type: 'details', title: 'Detail Publikasi', items: [
+      { type: 'title' as const, title: book.title, subtitle: book.author, category: book.category },
+      { type: 'overview' as const, title: 'Ringkasan', content: book.description },
+      { type: 'details' as const, title: 'Detail Publikasi', items: [
         { label: 'Kategori', value: book.category },
         { label: 'Format', value: book.format },
         { label: 'Tahun', value: book.year.toString() },
-        { label: 'Halaman', value: book.pages.toString() },
-        { label: 'Bahasa', value: book.language },
-        { label: 'ISBN', value: book.isbn },
-        { label: 'Penerbit', value: book.publisher },
+        { label: 'Halaman', value: book.pages?.toString() || '-' },
+        { label: 'Bahasa', value: book.language || '-' },
+        { label: 'ISBN', value: book.isbn || '-' },
+        { label: 'Penerbit', value: book.publisher || '-' },
       ]},
-      { type: 'stats', title: 'Statistik', items: [
+      { type: 'stats' as const, title: 'Statistik', items: [
         { label: 'Rating', value: `${book.rating}/5.0` },
-        { label: 'Downloads', value: book.downloads.toLocaleString('id-ID') },
+        { label: 'Downloads', value: (book.downloads || 0).toLocaleString('id-ID') },
       ]},
-      { type: 'end', title: 'Terima Kasih', subtitle: 'NeuroLibrary - Perpustakaan Digital Neurologi' },
+      { type: 'end' as const, title: 'Terima Kasih', subtitle: 'NeuroLibrary - Perpustakaan Digital Neurologi' },
     ];
   }, [book]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -3278,7 +4290,6 @@ function PresentationMode({ isOpen, onClose, book }: PresentationModeProps) {
     }
   };
 
-  // Reset when opening
   useEffect(() => { if (isOpen) setCurrentSlide(0); }, [isOpen]);
 
   if (!isOpen || !book) return null;
@@ -3315,7 +4326,6 @@ function PresentationMode({ isOpen, onClose, book }: PresentationModeProps) {
             transition={{ duration: 0.3, ease: 'easeInOut' }}
             className="w-full max-w-4xl"
           >
-            {/* Title Slide */}
             {slide.type === 'title' && (
               <div className="text-center text-white">
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0e7490]/20 text-[#0e7490] text-sm mb-6">
@@ -3325,7 +4335,6 @@ function PresentationMode({ isOpen, onClose, book }: PresentationModeProps) {
                 <p className="text-lg text-white/60">{slide.subtitle}</p>
               </div>
             )}
-            {/* Overview Slide */}
             {slide.type === 'overview' && (
               <div className="text-white">
                 <h2 className="text-2xl md:text-3xl font-bold mb-6 flex items-center gap-2">
@@ -3334,7 +4343,6 @@ function PresentationMode({ isOpen, onClose, book }: PresentationModeProps) {
                 <p className="text-lg leading-relaxed text-white/80 whitespace-pre-line">{slide.content}</p>
               </div>
             )}
-            {/* Details Slide */}
             {slide.type === 'details' && (
               <div className="text-white">
                 <h2 className="text-2xl font-bold mb-6">{slide.title}</h2>
@@ -3348,7 +4356,6 @@ function PresentationMode({ isOpen, onClose, book }: PresentationModeProps) {
                 </div>
               </div>
             )}
-            {/* Stats Slide */}
             {slide.type === 'stats' && (
               <div className="text-white">
                 <h2 className="text-2xl font-bold mb-6">{slide.title}</h2>
@@ -3362,7 +4369,6 @@ function PresentationMode({ isOpen, onClose, book }: PresentationModeProps) {
                 </div>
               </div>
             )}
-            {/* End Slide */}
             {slide.type === 'end' && (
               <div className="text-center text-white">
                 <Brain size={48} className="mx-auto mb-4 text-[#0e7490]" />

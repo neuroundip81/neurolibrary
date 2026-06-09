@@ -11,6 +11,7 @@ import {
   Globe,
   AlignLeft,
   AlertTriangle,
+  Link2,
 } from 'lucide-react';
 import type { Book, BookFormat } from '@/types';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
@@ -73,6 +74,8 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [sourceType, setSourceType] = useState<'upload' | 'external'>('upload');
+  const [externalUrl, setExternalUrl] = useState('');
 
   const [formData, setFormData] = useState<UploadFormData>({
     title: '',
@@ -115,6 +118,8 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
     setStatus('idle');
     setProgress(0);
     setError(null);
+    setSourceType('upload');
+    setExternalUrl('');
     setFormData({
       title: '',
       author: '',
@@ -221,8 +226,15 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
   }, []);
 
   const handlePublish = useCallback(async () => {
-    if (!file) return;
-
+    // Validation
+    if (sourceType === 'upload' && !file) {
+      setError('File buku wajib diupload.');
+      return;
+    }
+    if (sourceType === 'external' && !externalUrl.trim()) {
+      setError('URL external wajib diisi.');
+      return;
+    }
     if (!formData.title.trim()) {
       setError('Judul buku wajib diisi.');
       return;
@@ -230,8 +242,10 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
 
     setError(null);
 
-    // Simulate upload progress
-    await simulateUpload();
+    // Simulate upload progress for file upload
+    if (sourceType === 'upload') {
+      await simulateUpload();
+    }
 
     // Save book metadata to localStorage
     const existingBooks = window.localStorage.getItem('neuro_books');
@@ -262,7 +276,9 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
       publisher: 'Upload Pengguna',
       language: formData.language || 'Indonesia',
       featured: false,
-      tags: ['upload'],
+      tags: sourceType === 'external' ? ['external', 'link'] : ['upload'],
+      sourceType,
+      externalUrl: sourceType === 'external' ? externalUrl.trim() : undefined,
     };
 
     allBooks.push(newBook);
@@ -272,7 +288,7 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
     setBooks(allBooks);
 
     // Store file as base64 (for demo) with size check
-    if (file.size <= 2 * 1024 * 1024) {
+    if (sourceType === 'upload' && file && file.size <= 2 * 1024 * 1024) {
       try {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -289,7 +305,12 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
         // silently fail
       }
     }
-  }, [file, formData, setBooks, simulateUpload]);
+
+    // For external link, set complete status immediately
+    if (sourceType === 'external') {
+      setStatus('complete');
+    }
+  }, [file, formData, setBooks, simulateUpload, sourceType, externalUrl]);
 
   if (!isOpen) return null;
 
@@ -340,7 +361,69 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
             </div>
           )}
 
-          {!file ? (
+          {/* Source type tabs */}
+          {status === 'idle' && (
+            <div className="flex mb-4 bg-[#f0f9ff] rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => setSourceType('upload')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all ${
+                  sourceType === 'upload'
+                    ? 'bg-white text-[#0e7490] shadow-sm'
+                    : 'text-[#64748b] hover:text-[#0e7490]'
+                }`}
+              >
+                <Upload size={16} />
+                Upload File
+              </button>
+              <button
+                type="button"
+                onClick={() => setSourceType('external')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all ${
+                  sourceType === 'external'
+                    ? 'bg-white text-[#0e7490] shadow-sm'
+                    : 'text-[#64748b] hover:text-[#0e7490]'
+                }`}
+              >
+                <Link2 size={16} />
+                External Link
+              </button>
+            </div>
+          )}
+
+          {sourceType === 'external' && status !== 'complete' ? (
+            /* External Link Input */
+            <div className="space-y-4">
+              {status === 'idle' && (
+                <div>
+                  <label
+                    htmlFor="external-url"
+                    className="block text-sm font-medium text-[#164e63] mb-1.5"
+                  >
+                    URL Buku (Google Drive, Dropbox, dll.)
+                  </label>
+                  <div className="relative">
+                    <Link2
+                      size={18}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]"
+                    />
+                    <input
+                      ref={firstInputRef}
+                      id="external-url"
+                      type="url"
+                      value={externalUrl}
+                      onChange={(e) => setExternalUrl(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-[#cffafe] bg-white text-[#164e63] placeholder:text-[#94a3b8] focus:outline-none focus:border-[#0e7490] focus:ring-2 focus:ring-[#0e7490]/15 transition-all"
+                      placeholder="https://drive.google.com/..."
+                    />
+                  </div>
+                  <p className="text-xs text-[#94a3b8] mt-1.5">
+                    Masukkan link ke dokumen di Google Drive, Dropbox, atau platform lain.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : !file ? (
             /* Drag & Drop Area */
             <div
               onDragOver={handleDragOver}
@@ -609,7 +692,7 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
         </div>
 
         {/* Footer actions */}
-        {file && status === 'idle' && (
+        {((file && status === 'idle') || (sourceType === 'external' && status === 'idle')) && (
           <div className="flex-shrink-0 p-4 border-t border-[#cffafe] flex gap-3">
             <button
               onClick={handleClose}
@@ -619,7 +702,7 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
             </button>
             <button
               onClick={handlePublish}
-              disabled={!formData.title.trim()}
+              disabled={!formData.title.trim() || (sourceType === 'upload' && !file) || (sourceType === 'external' && !externalUrl.trim())}
               className="flex-1 py-2.5 rounded-lg bg-[#0e7490] text-white font-medium text-sm transition-all hover:bg-[#155e75] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <Upload size={16} />

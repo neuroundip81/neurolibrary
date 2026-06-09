@@ -6,7 +6,7 @@ import {
   Star, Download, Library,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { books } from '@/data/books';
+import { getAllBooks } from '@/data/books';
 import { useBookmarks } from '@/hooks/useBookmarks';
 import { useToast } from '@/hooks/useToast';
 import SEO from '@/components/SEO';
@@ -135,14 +135,16 @@ export default function BookDetail() {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
 
-  const book = useMemo(() => books.find((b) => b.id === id), [id]);
+  const allBooks = useMemo(() => getAllBooks(), []);
+
+  const book = useMemo(() => allBooks.find((b) => b.id === id), [id, allBooks]);
 
   const relatedBooks = useMemo(() => {
     if (!book) return [];
-    return books
+    return allBooks
       .filter((b) => b.categorySlug === book.categorySlug && b.id !== book.id)
       .slice(0, 6);
-  }, [book]);
+  }, [book, allBooks]);
 
   const isBookmarked = book ? bookmarks.includes(book.id) : false;
 
@@ -359,6 +361,7 @@ export default function BookDetail() {
                   bookId={book.id}
                   initialCount={book.downloads}
                   size="lg"
+                  externalUrl={book.externalUrl}
                   onDownloadComplete={() => success('Download berhasil dimulai')}
                 />
 

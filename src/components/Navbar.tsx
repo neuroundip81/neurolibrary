@@ -236,7 +236,7 @@ export default function Navbar({
                       </button>
 
                       <Link
-                        to="/profile"
+                        to="/settings"
                         className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#164e63] hover:bg-[#f0f9ff] transition-colors"
                         onClick={() => setUserMenuOpen(false)}
                       >
@@ -291,7 +291,7 @@ export default function Navbar({
                       </button>
 
                       <Link
-                        to="/profile"
+                        to="/settings"
                         className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#164e63] hover:bg-[#f0f9ff] transition-colors"
                         onClick={() => setUserMenuOpen(false)}
                       >

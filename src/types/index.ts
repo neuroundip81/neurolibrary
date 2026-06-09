@@ -19,6 +19,8 @@ export interface Book {
   language: string;
   featured: boolean;
   tags: string[];
+  externalUrl?: string;
+  sourceType?: 'upload' | 'external';
 }
 
 export interface Category {

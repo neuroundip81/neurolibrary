@@ -6,7 +6,7 @@ import {
   Star, Calendar,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { books, featuredBooks, sortBooks } from '@/data/books';
+import { getAllBooks, featuredBooks as staticFeaturedBooks, sortBooks } from '@/data/books';
 import { categories, filterPills } from '@/data/categories';
 import { useBookmarks } from '@/hooks/useBookmarks';
 import { useToast } from '@/hooks/useToast';
@@ -109,6 +109,13 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Get all books including uploaded ones from localStorage
+  const allBooks = useMemo(() => getAllBooks(), []);
+  const mergedFeaturedBooks = useMemo(() => {
+    const featured = allBooks.filter((b) => b.featured);
+    return featured.length > 0 ? featured : staticFeaturedBooks;
+  }, [allBooks]);
+
   const clearAllFilters = useCallback(() => {
     setSearchQuery('');
     setDebouncedQuery('');
@@ -123,7 +130,7 @@ export default function Home() {
 
   // Filtered and sorted books
   const filteredBooks = useMemo(() => {
-    let result = [...books];
+    let result = [...allBooks];
 
     if (activeCategory !== 'all') {
       result = result.filter((b) => b.categorySlug === activeCategory);
@@ -153,7 +160,7 @@ export default function Home() {
     }
 
     return sortBooks(result, sortBy);
-  }, [activeCategory, debouncedQuery, sortBy, minRating, yearFrom, yearTo]);
+  }, [activeCategory, debouncedQuery, sortBy, minRating, yearFrom, yearTo, allBooks]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredBooks.length / BOOKS_PER_PAGE));
@@ -502,7 +509,7 @@ export default function Home() {
           </ScrollReveal>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredBooks.map((book) => (
+            {mergedFeaturedBooks.map((book) => (
               <div key={book.id} className="lg:col-span-1">
                 <BookCard
                   book={book}
