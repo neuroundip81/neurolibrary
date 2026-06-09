@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Book } from '@/types';
 import { allUsers } from '@/data/usersData';
+import { getAllBooks, getTotalBookCount, getTotalDownloadCount, getAverageRating } from '@/data/books';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -53,7 +54,6 @@ export interface BooksByCategory {
 /*  Keys                                                               */
 /* ------------------------------------------------------------------ */
 
-const BOOKS_KEY = 'neuro_books';
 const COMMENTS_KEY = 'neuro_comments';
 const ACTIVITIES_KEY = 'neuro_activities';
 const DOWNLOADS_KEY = 'neuro_download_log';
@@ -61,14 +61,6 @@ const DOWNLOADS_KEY = 'neuro_download_log';
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
-
-function getLocalBooks(): Book[] {
-  try {
-    const raw = localStorage.getItem(BOOKS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  return [];
-}
 
 function getLocalComments(): Array<{
   id: string;
@@ -114,10 +106,6 @@ function getStartOfDay(date: Date): Date {
   return d;
 }
 
-function isSameDay(a: Date, b: Date): boolean {
-  return getStartOfDay(a).getTime() === getStartOfDay(b).getTime();
-}
-
 function isThisWeek(date: Date): boolean {
   const now = new Date();
   const startOfWeek = new Date(now);
@@ -141,34 +129,35 @@ function formatDayLabel(date: Date): string {
 /* ------------------------------------------------------------------ */
 
 export function getDashboardStats(): DashboardStats {
-  const books = getLocalBooks();
+  const books = getAllBooks();
   const comments = getLocalComments();
   const downloadLog = getDownloadLog();
 
-  const totalBooks = books.length;
+  const totalBooks = getTotalBookCount();
   const totalUsers = allUsers.length;
-  const totalDownloads = books.reduce((sum, b) => sum + (b.downloads || 0), 0);
-  const avgRating =
-    books.length > 0
-      ? books.reduce((sum, b) => sum + (b.rating || 0), 0) / books.length
-      : 0;
+  const totalDownloads = getTotalDownloadCount();
+  const avgRating = getAverageRating();
 
-  // Books added this month
-  const booksAddedThisMonth = books.filter((b) => {
-    const d = new Date(b.year || 0, 0, 1);
-    return isThisMonth(d) || (b.id && b.id.length > 8);
+  // Books added this month (from localStorage uploads)
+  const localBooks = (() => {
+    try {
+      const raw = localStorage.getItem('neuro_books');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  })();
+  
+  const booksAddedThisMonth = localBooks.filter((b: Book) => {
+    if (b.createdAt) {
+      return isThisMonth(new Date(b.createdAt));
+    }
+    return false;
   }).length;
 
-  // Active users = users with reading history
-  const activeUsers = allUsers.filter(
-    (u) => u.readingHistory && u.readingHistory.length > 0
-  ).length;
-
-  // Downloads this week/month from log
+  // Downloads this week / month
   const downloadsThisWeek = downloadLog
     .filter((d) => isThisWeek(new Date(d.date)))
     .reduce((sum, d) => sum + d.count, 0);
-
+  
   const downloadsThisMonth = downloadLog
     .filter((d) => isThisMonth(new Date(d.date)))
     .reduce((sum, d) => sum + d.count, 0);
@@ -177,53 +166,48 @@ export function getDashboardStats(): DashboardStats {
     totalBooks,
     totalUsers,
     totalDownloads,
-    averageRating: Math.round(avgRating * 10) / 10,
+    averageRating: avgRating,
     booksAddedThisMonth,
-    activeUsers,
+    activeUsers: totalUsers, // Simplified
     totalComments: comments.length,
-    downloadsThisWeek: downloadsThisWeek || Math.floor(totalDownloads * 0.15),
-    downloadsThisMonth: downloadsThisMonth || Math.floor(totalDownloads * 0.4),
+    downloadsThisWeek,
+    downloadsThisMonth,
   };
 }
 
-export function getDownloadsOverTime(days: number = 7): DownloadOverTime[] {
-  const books = getLocalBooks();
-  const downloadLog = getDownloadLog();
+export function getDownloadsOverTime(days: number): DownloadOverTime[] {
+  const log = getDownloadLog();
   const result: DownloadOverTime[] = [];
-
+  
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
-    const dayLog = downloadLog.filter((d) => isSameDay(new Date(d.date), date));
-    const count = dayLog.reduce((sum, d) => sum + d.count, 0);
-
-    // Fallback: distribute total downloads across days with some randomness
-    const fallbackCount =
-      count || Math.floor(
-        books.reduce((sum, b) => sum + (b.downloads || 0), 0) / days *
-          (0.7 + Math.random() * 0.6)
-      );
-
+    const dateStr = date.toISOString().split('T')[0];
+    
+    const downloads = log
+      .filter((d) => d.date === dateStr)
+      .reduce((sum, d) => sum + d.count, 0);
+    
     result.push({
-      date: date.toISOString().split('T')[0],
+      date: dateStr,
       label: formatDayLabel(date),
-      downloads: Math.max(1, fallbackCount),
+      downloads,
     });
   }
-
+  
   return result;
 }
 
-export function getTopBooks(limit: number = 10): TopBook[] {
-  const books = getLocalBooks();
-  return [...books]
+export function getTopBooks(limit: number): TopBook[] {
+  const books = getAllBooks();
+  return books
     .sort((a, b) => (b.downloads || 0) - (a.downloads || 0))
     .slice(0, limit)
     .map((b) => ({
       id: b.id,
       title: b.title,
       author: b.author,
-      coverImage: b.coverImage,
+      coverImage: b.coverImage || '/book-default.jpg',
       downloads: b.downloads || 0,
       rating: b.rating || 0,
       category: b.category,
@@ -231,115 +215,56 @@ export function getTopBooks(limit: number = 10): TopBook[] {
 }
 
 export function getBooksByCategory(): BooksByCategory[] {
-  const books = getLocalBooks();
-  const map: Record<string, { name: string; slug: string; count: number }> = {};
-
+  const books = getAllBooks();
+  const counts: Record<string, { name: string; count: number }> = {};
+  
   books.forEach((b) => {
-    const key = b.categorySlug || b.category;
-    if (!map[key]) {
-      map[key] = { name: b.category, slug: key, count: 0 };
+    if (!counts[b.categorySlug]) {
+      counts[b.categorySlug] = { name: b.category, count: 0 };
     }
-    map[key].count++;
+    counts[b.categorySlug].count++;
   });
-
-  return Object.values(map)
+  
+  return Object.entries(counts)
+    .map(([slug, { name, count }]) => ({ name, slug, count }))
     .sort((a, b) => b.count - a.count);
 }
 
-export function getRecentActivity(limit: number = 20): RecentActivity[] {
-  const stored = getStoredActivities();
-  const comments = getLocalComments();
-  const books = getLocalBooks();
-
-  const activities: RecentActivity[] = [];
-
-  // Convert stored activities
-  stored.slice(0, limit).forEach((act) => {
-    const typeMap: Record<string, RecentActivity['type']> = {
-      book: 'upload',
-      user: 'register',
-      comment: 'comment',
-      category: 'upload',
-      theme: 'upload',
-    };
-
-    activities.push({
-      id: act.id,
-      action: act.message,
-      user: 'Admin',
-      userAvatar: '',
-      type: typeMap[act.type] || 'upload',
-      timestamp: act.timestamp,
-    });
-  });
-
-  // Add comment activities
-  comments.slice(0, limit).forEach((c) => {
-    activities.push({
-      id: `comment-${c.id}`,
-      action: `Memberikan komentar pada "${c.bookTitle}"`,
-      user: c.userName,
-      userAvatar: c.userAvatar,
-      type: 'comment',
-      timestamp: c.createdAt,
-    });
-  });
-
-  // Add book upload activities from books
-  books
-    .filter((b) => b.downloads && b.downloads > 0)
-    .slice(0, limit)
-    .forEach((b) => {
-      activities.push({
-        id: `book-${b.id}`,
-        action: `Mengunduh "${b.title}"`,
-        user: allUsers[Math.floor(Math.random() * allUsers.length)]?.name || 'User',
-        userAvatar: '',
-        type: 'download',
-        timestamp: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-      });
-    });
-
-  // Sort by timestamp descending
-  activities.sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
-
-  return activities.slice(0, limit);
-}
-
-export function logDownload(bookId: string): void {
-  try {
-    const log = getDownloadLog();
-    const today = new Date().toISOString().split('T')[0];
-    const existing = log.find((l) => l.bookId === bookId && l.date.startsWith(today));
-
-    if (existing) {
-      existing.count++;
-    } else {
-      log.push({ bookId, date: new Date().toISOString(), count: 1 });
-    }
-
-    localStorage.setItem(DOWNLOADS_KEY, JSON.stringify(log));
-  } catch {
-    // Silently fail
-  }
+export function getRecentActivity(limit: number): RecentActivity[] {
+  const activities = getStoredActivities();
+  return activities
+    .slice(-limit)
+    .reverse()
+    .map((a) => ({
+      id: a.id || String(Date.now()),
+      action: a.message,
+      user: 'System',
+      userAvatar: '/avatar-default.jpg',
+      type: (a.type === 'book' ? 'upload' : a.type === 'user' ? 'register' : 'comment') as RecentActivity['type'],
+      timestamp: a.timestamp,
+    }));
 }
 
 export function getUserActivityStats() {
-  return allUsers.map((user) => ({
-    id: user.id,
-    name: user.name,
-    role: user.role,
-    specialty: user.specialty,
-    bookmarksCount: user.bookmarks.length,
-    booksRead: user.readingHistory.filter((h) => h.progress === 100).length,
-    totalReading: user.readingHistory.length,
-    lastActive:
-      user.readingHistory.length > 0
-        ? user.readingHistory.sort(
-            (a, b) => new Date(b.lastRead).getTime() - new Date(a.lastRead).getTime()
-          )[0].lastRead
-        : user.joinDate,
-  }));
+  return {
+    totalUsers: allUsers.length,
+    adminCount: allUsers.filter((u) => u.role === 'admin').length,
+    userCount: allUsers.filter((u) => u.role === 'user').length,
+    newThisMonth: 0,
+  };
+}
+
+export function logActivity(message: string, type: 'book' | 'user' | 'comment' | 'category' | 'theme' = 'book') {
+  const activities = getStoredActivities();
+  activities.push({
+    id: String(Date.now()),
+    type,
+    message,
+    timestamp: new Date().toISOString(),
+  });
+  // Keep last 100
+  if (activities.length > 100) {
+    activities.shift();
+  }
+  localStorage.setItem('neuro_activities', JSON.stringify(activities));
 }
