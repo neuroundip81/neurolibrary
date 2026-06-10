@@ -108,7 +108,7 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { books as defaultBooks } from '@/data/books';
+import { books as defaultBooks, getAllBooks, parseCSVToBooks } from '@/data/books';
 import { categories as defaultCategories } from '@/data/categories';
 import { allUsers } from '@/data/usersData';
 import {
@@ -184,6 +184,7 @@ type AdminTab =
   | 'theme'
   | 'add-book'
   | 'upload-file'
+  | 'import-csv'
   | 'background'
   | 'about-editor';
 
@@ -313,6 +314,7 @@ const navItems: { key: AdminTab | 'back'; label: string; icon: React.ElementType
   { key: 'theme', label: 'Edit Tema', icon: Palette },
   { key: 'add-book', label: 'Tambah Buku', icon: PlusCircle },
   { key: 'upload-file', label: 'Upload File', icon: FileUp },
+  { key: 'import-csv', label: 'Import CSV', icon: FileDown },
   { key: 'back', label: 'Kembali ke Site', icon: ArrowLeft },
 ];
 
@@ -413,7 +415,7 @@ export default function Admin() {
   const navigate = useNavigate();
 
   /* ── localStorage data ── */
-  const [books, setBooks] = useLocalStorage<Book[]>('neuro_books', defaultBooks);
+  const [books, setBooks] = useLocalStorage<Book[]>('neuro_books', getAllBooks());
   const [users, setUsers] = useLocalStorage<AdminUser[]>('neuro_users', [
     initialAdminUser,
     ...allUsers
@@ -655,6 +657,9 @@ export default function Admin() {
               )}
               {activeTab === 'upload-file' && (
                 <UploadFileTab addActivity={addActivity} />
+              )}
+              {activeTab === 'import-csv' && (
+                <ImportCSVSection setBooks={setBooks} addActivity={addActivity} />
               )}
             </motion.div>
           </AnimatePresence>
@@ -3721,13 +3726,20 @@ function AddBookTab({
                 </div>
                 <div>
                   <label className="text-sm font-medium text-[#164e63] mb-1 block">Kategori *</label>
-                  <Select value={form.category} onValueChange={(v) => update('category', v)}>
+                  <Select
+                    value={form.categorySlug}
+                    onValueChange={(v) => {
+                      const selected = categories.find((c) => c.slug === v);
+                      update('categorySlug', v);
+                      update('category', selected?.name || v);
+                    }}
+                  >
                     <SelectTrigger className={errors.category ? 'border-red-400' : ''}>
                       <SelectValue placeholder="Pilih kategori" />
                     </SelectTrigger>
                     <SelectContent>
                       {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                        <SelectItem key={cat.slug} value={cat.slug}>{cat.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -3954,6 +3966,164 @@ function AddBookTab({
 
 
 /* ═══════════════════════════════════════════
+   IMPORT CSV SECTION
+   ═══════════════════════════════════════════ */
+function ImportCSVSection({
+  setBooks,
+  addActivity,
+}: {
+  setBooks: React.Dispatch<React.SetStateAction<Book[]>>;
+  addActivity: (type: ActivityItem['type'], message: string) => void;
+}) {
+  const [csvText, setCsvText] = useState('');
+  const [preview, setPreview] = useState<Book[]>([]);
+
+  const handleParse = () => {
+    const parsed = parseCSVToBooks(csvText);
+    setPreview(parsed);
+    if (parsed.length === 0) {
+      toast.error('Tidak ada buku yang ditemukan. Periksa format CSV Anda.');
+    }
+  };
+
+  const handleImport = () => {
+    if (preview.length === 0) return;
+    setBooks((prev) => {
+      const existingIds = new Set(prev.map((b) => b.id));
+      const newBooks = preview.filter((b) => !existingIds.has(b.id));
+      return [...newBooks, ...prev];
+    });
+    addActivity('book', `Mengimport ${preview.length} buku dari CSV`);
+    toast.success(`${preview.length} buku berhasil diimport!`);
+    setCsvText('');
+    setPreview([]);
+  };
+
+  const handleClear = () => {
+    setCsvText('');
+    setPreview([]);
+  };
+
+  const sampleCSV = `title,author,category,year,pages,language,format,publisher,description,external_url
+Contoh Buku 1,Dr. Penulis,Neurologi Dasar,2024,320,Indonesia,PDF,Penerbit Medika,Deskripsi buku neurologi,
+Contoh Buku 2,Prof. Author,Stroke dan Pembuluh Darah (Serebrovaskular),2023,450,English,PDF,Springer,Tentang stroke,`;
+
+  return (
+    <div className="max-w-[900px] space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-[#164e63] text-base flex items-center gap-2">
+            <FileDown size={18} className="text-[#0e7490]" />
+            Import Buku dari CSV
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Format Info */}
+          <div className="bg-[#f0f9ff] rounded-lg p-4 border border-[#cffafe]">
+            <p className="text-sm font-medium text-[#164e63] mb-2">Format CSV yang didukung:</p>
+            <code className="text-xs text-[#64748b] block bg-white rounded p-2 border border-[#cffafe]">
+              title,author,category,year,pages,language,format,publisher,description,external_url
+            </code>
+            <p className="text-xs text-[#94a3b8] mt-2">
+              Header baris pertama wajib. Baris selanjutnya adalah data buku. Semua kolom opsional kecuali title dan author.
+            </p>
+            <button
+              onClick={() => { setCsvText(sampleCSV); }}
+              className="text-xs text-[#0e7490] hover:underline mt-2"
+            >
+              Klik untuk contoh format
+            </button>
+          </div>
+
+          {/* CSV Input */}
+          <div>
+            <label className="text-sm font-medium text-[#164e63] mb-1 block">Paste CSV di sini</label>
+            <Textarea
+              value={csvText}
+              onChange={(e) => setCsvText(e.target.value)}
+              rows={12}
+              placeholder="title,author,category,year,pages,language,format,publisher,description,external_url&#10;Buku A,Penulis A,Neurologi Dasar,2024,100,Indonesia,PDF,Penerbit A,Deskripsi,&#10;Buku B,Penulis B,Stroke dan Pembuluh Darah,2023,200,English,PDF,Penerbit B,Deskripsi,"
+              className="font-mono text-xs"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleParse}
+              disabled={!csvText.trim()}
+              className="bg-[#0e7490] hover:bg-[#155e75]"
+            >
+              <Eye size={15} className="mr-1" />
+              Preview
+            </Button>
+            <Button variant="outline" onClick={handleClear}>
+              <X size={15} className="mr-1" />
+              Bersihkan
+            </Button>
+          </div>
+
+          {/* Preview */}
+          {preview.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-[#164e63]">
+                  {preview.length} buku ditemukan
+                </p>
+                <Button
+                  onClick={handleImport}
+                  className="bg-[#0e7490] hover:bg-[#155e75]"
+                >
+                  <PlusCircle size={15} className="mr-1" />
+                  Import {preview.length} Buku
+                </Button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-[#f0f9ff]">
+                      <TableHead className="w-[40px]">#</TableHead>
+                      <TableHead>Judul</TableHead>
+                      <TableHead>Penulis</TableHead>
+                      <TableHead>Kategori</TableHead>
+                      <TableHead className="text-center">Tahun</TableHead>
+                      <TableHead className="text-center">Halaman</TableHead>
+                      <TableHead>Format</TableHead>
+                      <TableHead>Bahasa</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {preview.map((book, i) => (
+                      <TableRow key={book.id}>
+                        <TableCell className="text-[#64748b] text-xs">{i + 1}</TableCell>
+                        <TableCell className="font-medium text-[#164e63] max-w-[200px] truncate">
+                          {book.title}
+                        </TableCell>
+                        <TableCell className="text-[#64748b]">{book.author}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs border-[#cffafe] text-[#0e7490]">
+                            {book.category}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center text-[#64748b]">{book.year}</TableCell>
+                        <TableCell className="text-center text-[#64748b]">{book.pages || '-'}</TableCell>
+                        <TableCell className="text-[#64748b] text-xs">{book.format}</TableCell>
+                        <TableCell className="text-[#64748b] text-xs">{book.language}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
    BOOK FORM (Shared for Add/Edit - Enhanced)
    ═══════════════════════════════════════════ */
 function BookForm({
@@ -4037,13 +4207,20 @@ function BookForm({
         </div>
         <div>
           <label className="text-sm font-medium text-[#164e63] mb-1 block">Kategori *</label>
-          <Select value={form.category} onValueChange={(v) => update('category', v)}>
+          <Select
+            value={form.categorySlug}
+            onValueChange={(v) => {
+              const selected = categories.find((c) => c.slug === v);
+              update('categorySlug', v);
+              update('category', selected?.name || v);
+            }}
+          >
             <SelectTrigger className={errors.category ? 'border-red-400' : ''}>
               <SelectValue placeholder="Pilih kategori" />
             </SelectTrigger>
             <SelectContent>
               {categories.map((cat) => (
-                <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                <SelectItem key={cat.slug} value={cat.slug}>{cat.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>

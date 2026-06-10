@@ -218,13 +218,11 @@ export default function Home() {
     return filters;
   }, [debouncedQuery, activeCategory, minRating, yearFrom, yearTo, handleCategoryChange]);
 
-  // Dynamic stats from actual data
   const stats = useMemo(() => {
-    const all = allBooks;
-    const cats = new Set(all.map(b => b.categorySlug)).size;
-    const downloads = all.reduce((s, b) => s + (b.downloads || 0), 0);
+    const cats = new Set(allBooks.map(b => b.categorySlug)).size;
+    const downloads = allBooks.reduce((s, b) => s + (b.downloads || 0), 0);
     return [
-      { icon: BookOpen, label: 'Buku', value: all.length.toLocaleString('id-ID') },
+      { icon: BookOpen, label: 'Buku', value: allBooks.length.toLocaleString('id-ID') },
       { icon: Layers, label: 'Kategori', value: cats.toString() },
       { icon: Users, label: 'Pengguna', value: '7' },
       { icon: Download, label: 'Downloads', value: downloads.toLocaleString('id-ID') },
@@ -246,6 +244,7 @@ export default function Home() {
 
       {/* ========== Section 1: Hero ========== */}
       <section className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#164e63] via-[#0e7490] to-[#14b8a6]">
+        {/* Blue dots animation - can be hidden by removing NeuralNetworkBackground */}
         <NeuralNetworkBackground />
 
         {/* Decorative circles */}
@@ -509,36 +508,38 @@ export default function Home() {
       </section>
 
       {/* ========== Section 3: Featured Books Carousel ========== */}
-      <section className="py-12 bg-[#f0f9ff]">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
-          <ScrollReveal>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="font-display text-2xl sm:text-3xl font-semibold text-[#164e63] flex items-center gap-2">
-                <Sparkles size={28} className="text-[#0e7490]" />
-                Buku Unggulan
-              </h2>
-              <a href="#katalog" className="text-sm text-[#0e7490] hover:text-[#164e63] font-medium flex items-center gap-1 transition-colors">
-                Lihat Semua <ChevronRight size={16} />
-              </a>
-            </div>
-          </ScrollReveal>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {mergedFeaturedBooks.map((book) => (
-              <div key={book.id} className="lg:col-span-1">
-                <BookCard
-                  book={book}
-                  isBookmarked={bookmarks.includes(book.id)}
-                  onToggleBookmark={handleToggleBookmark}
-                  onOpenDetail={handleOpenDetail}
-                  featured
-                  index={0}
-                />
+      {!debouncedQuery && activeCategory === 'all' && (
+        <section className="py-12 bg-[#f0f9ff]">
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
+            <ScrollReveal>
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="font-display text-2xl sm:text-3xl font-semibold text-[#164e63] flex items-center gap-2">
+                  <Sparkles size={28} className="text-[#0e7490]" />
+                  Buku Unggulan
+                </h2>
+                <a href="#katalog" className="text-sm text-[#0e7490] hover:text-[#164e63] font-medium flex items-center gap-1 transition-colors">
+                  Lihat Semua <ChevronRight size={16} />
+                </a>
               </div>
-            ))}
+            </ScrollReveal>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {mergedFeaturedBooks.map((book) => (
+                <div key={book.id} className="lg:col-span-1">
+                  <BookCard
+                    book={book}
+                    isBookmarked={bookmarks.includes(book.id)}
+                    onToggleBookmark={handleToggleBookmark}
+                    onOpenDetail={handleOpenDetail}
+                    featured
+                    index={0}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ========== Section 4: Full Catalog Grid ========== */}
       <section id="katalog" className="py-12 bg-[#f0f9ff]">
